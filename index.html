@@ -106,9 +106,24 @@
   .pantry-category { font-weight: 600; color: #1a3a5c; margin: 16px 0 6px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
   .history-item {
     background: #fff; border: 1px solid #e1e6ed; border-radius: 6px;
-    padding: 10px 12px; margin-bottom: 6px; display: flex; justify-content: space-between;
+    padding: 12px; margin-bottom: 6px; display: flex; justify-content: space-between;
+    align-items: center; gap: 8px;
   }
+  .history-item > span:first-child { flex: 1; font-weight: 500; }
   .history-date { color: #6a7890; font-size: 13px; }
+  .history-item input[type=date] {
+    font-size: 13px; padding: 6px 8px;
+    border: 1px solid #1a3a5c; border-radius: 6px;
+    background: #eef2f7; color: #1a3a5c; font-weight: 500;
+    cursor: pointer;
+  }
+  .history-item input[type=date]:hover { background: #dce4ee; }
+  .history-item button.delete-x {
+    padding: 6px 10px; font-size: 14px; font-weight: 700;
+    color: #c0392b; background: #fff; border: 1px solid #e1e6ed;
+    border-radius: 6px; cursor: pointer; min-width: 32px;
+  }
+  .history-item button.delete-x:hover { background: #fde5e2; }
   .ideas-form { background: #fff; border: 1px solid #e1e6ed; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
   .ideas-form label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
   .ideas-form select, .ideas-form input {
@@ -624,12 +639,9 @@ function renderHistory() {
   el.innerHTML = recent.map((h, idx) => `
     <div class="history-item">
       <span>${h.meal}</span>
-      <span style="display: flex; align-items: center; gap: 8px;">
-        <input type="date" value="${h.date}" onchange="updateHistoryDate(${idx}, this.value)"
-          style="font-size: 12px; padding: 3px 5px; border: 1px solid #cfd7e2; border-radius: 4px;">
-        <button class="secondary" style="padding: 4px 10px; font-size: 12px;"
-          onclick="removeHistoryEntry(${idx})">✕</button>
-      </span>
+      <input type="date" value="${h.date}" title="Tap to change date"
+        onchange="updateHistoryDate(${idx}, this.value)">
+      <button class="delete-x" title="Remove" onclick="removeHistoryEntry(${idx})">✕</button>
     </div>`).join('');
 }
 
