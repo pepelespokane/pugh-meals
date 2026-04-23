@@ -187,6 +187,7 @@
   <section id="history">
     <h2>Recent Dinners</h2>
     <p style="color: #6a7890; font-size: 13px; margin: 0 0 12px;">Last 30 days of dinners you've logged.</p>
+    <button class="big-btn muted" onclick="addPastMeal()">+ Log a Past Meal</button>
     <div id="history-list"></div>
   </section>
 
@@ -376,12 +377,15 @@ document.querySelectorAll('nav button').forEach(b => {
 
 // ==================== LIBRARY ====================
 
-function renderLibrary() {
+function populateProteinFilter() {
   const proteinSel = document.getElementById('filter-protein');
+  const currentValue = proteinSel.value;
   const proteins = [...new Set(state.meals.map(m => m.p))].sort();
   proteinSel.innerHTML = '<option value="">All proteins</option>' +
-    proteins.map(p => `<option>${p}</option>`).join('');
+    proteins.map(p => `<option${currentValue === p ? ' selected' : ''}>${p}</option>`).join('');
+}
 
+function renderLibrary() {
   const timeFilter = document.getElementById('filter-time').value;
   const proteinFilter = document.getElementById('filter-protein').value;
   const searchFilter = document.getElementById('filter-search').value.toLowerCase();
@@ -568,16 +572,87 @@ function addPantryItem() {
 
 function renderHistory() {
   const el = document.getElementById('history-list');
-  const recent = state.history.slice(0, 30);
+  const recent = state.history.slice(0, 60);
   if (recent.length === 0) {
     el.innerHTML = '<div class="empty-state">No dinners logged yet. Use "Had this tonight" on a meal.</div>';
     return;
   }
-  el.innerHTML = recent.map(h => `
+  el.innerHTML = recent.map((h, idx) => `
     <div class="history-item">
       <span>${h.meal}</span>
-      <span class="history-date">${h.date}</span>
+      <span style="display: flex; align-items: center; gap: 8px;">
+        <input type="date" value="${h.date}" onchange="updateHistoryDate(${idx}, this.value)"
+          style="font-size: 12px; padding: 3px 5px; border: 1px solid #cfd7e2; border-radius: 4px;">
+        <button class="secondary" style="padding: 4px 10px; font-size: 12px;"
+          onclick="removeHistoryEntry(${idx})">✕</button>
+      </span>
     </div>`).join('');
+}
+
+function removeHistoryEntry(idx) {
+  const entry = state.history[idx];
+  if (!entry) return;
+  if (!confirm(`Remove "${entry.meal}" from ${entry.date}?`)) return;
+  state.history.splice(idx, 1);
+  // Recalculate last-made for the affected meal
+  recalculateLastMade(entry.meal);
+  save();
+  renderAll();
+  toast("✓ Removed");
+}
+
+function updateHistoryDate(idx, newDate) {
+  if (!newDate) return;
+  const entry = state.history[idx];
+  if (!entry) return;
+  const mealName = entry.meal;
+  entry.date = newDate;
+  // Re-sort history by date descending
+  state.history.sort((a, b) => b.date.localeCompare(a.date));
+  recalculateLastMade(mealName);
+  save();
+  renderAll();
+  toast("✓ Date updated");
+}
+
+function recalculateLastMade(mealName) {
+  const meal = state.meals.find(m => m.n === mealName);
+  if (!meal) return;
+  const mostRecent = state.history.find(h => h.meal === mealName);
+  meal.l = mostRecent ? mostRecent.date : undefined;
+}
+
+function addPastMeal() {
+  const content = document.getElementById('modal-content');
+  const sortedMeals = [...state.meals].sort((a, b) => a.n.localeCompare(b.n));
+  const today = new Date().toISOString().split('T')[0];
+  content.innerHTML = `
+    <h3>Log a Past Meal</h3>
+    <label>Meal</label>
+    <select id="past-meal">
+      ${sortedMeals.map(m => `<option value="${escapeQ(m.n)}">${m.n}</option>`).join('')}
+    </select>
+    <label>Date we ate it</label>
+    <input type="date" id="past-date" value="${today}" max="${today}">
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancel</button>
+      <button class="primary" onclick="savePastMeal()">Log it</button>
+    </div>`;
+  document.getElementById('modal').classList.add('active');
+}
+
+function savePastMeal() {
+  const mealName = document.getElementById('past-meal').value;
+  const date = document.getElementById('past-date').value;
+  if (!mealName || !date) { toast("Pick a meal and date"); return; }
+  state.history.unshift({ date, meal: mealName });
+  state.history.sort((a, b) => b.date.localeCompare(a.date));
+  state.history = state.history.slice(0, 180);
+  recalculateLastMade(mealName);
+  save();
+  closeModal();
+  renderAll();
+  toast(`✓ Logged ${mealName} on ${date}`);
 }
 
 // ==================== IDEAS ====================
@@ -763,6 +838,7 @@ function toast(msg) {
 }
 
 function renderAll() {
+  populateProteinFilter();
   renderLibrary();
   renderWeek();
   renderPantry();
