@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1a3a5c">
+<title>Pugh Family Dinners</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0; padding: 0;
+    background: #f5f7fa;
+    color: #1a2340;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  header {
+    background: #1a3a5c;
+    color: #fff;
+    padding: 14px 16px;
+    position: sticky; top: 0; z-index: 50;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  h2 { margin: 0 0 12px; font-size: 18px; color: #1a3a5c; }
+  nav {
+    background: #fff; display: flex; overflow-x: auto;
+    border-bottom: 1px solid #e1e6ed;
+    position: sticky; top: 48px; z-index: 40;
+  }
+  nav button {
+    flex: 1; min-width: 80px; padding: 14px 8px;
+    background: none; border: none; font-size: 14px; font-weight: 600;
+    color: #6a7890; cursor: pointer; border-bottom: 3px solid transparent;
+    transition: all 0.15s;
+  }
+  nav button.active { color: #1a3a5c; border-bottom-color: #c0392b; }
+  main { padding: 16px; padding-bottom: 100px; max-width: 720px; margin: 0 auto; }
+  section { display: none; }
+  section.active { display: block; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .filters select, .filters input {
+    padding: 8px 10px; border: 1px solid #cfd7e2; border-radius: 6px;
+    font-size: 14px; background: #fff; flex: 1; min-width: 100px;
+  }
+  .meal-card {
+    background: #fff; border: 1px solid #e1e6ed; border-radius: 8px;
+    padding: 12px; margin-bottom: 10px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .meal-title { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
+  .meal-meta { font-size: 12px; color: #6a7890; margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .meal-meta span {
+    background: #eef2f7; padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+  }
+  .meal-meta .recent { background: #fde5e2; color: #c0392b; }
+  .meal-meta .fresh { background: #e2f0d9; color: #2d6a3f; }
+  .meal-ingredients { font-size: 13px; color: #4a5a75; margin-bottom: 10px; }
+  .meal-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  button.primary {
+    background: #c0392b; color: #fff; border: none; padding: 8px 14px;
+    border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  button.secondary {
+    background: #fff; color: #1a3a5c; border: 1px solid #cfd7e2; padding: 8px 14px;
+    border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  button.primary:active, button.secondary:active { transform: scale(0.98); }
+  .big-btn {
+    display: block; width: 100%; padding: 16px; margin-bottom: 10px;
+    background: #1a3a5c; color: #fff; border: none; border-radius: 8px;
+    font-size: 16px; font-weight: 600; cursor: pointer;
+  }
+  .big-btn.accent { background: #c0392b; }
+  .big-btn.muted { background: #fff; color: #1a3a5c; border: 1px solid #cfd7e2; }
+  .week-day {
+    background: #fff; border: 1px solid #e1e6ed; border-radius: 8px;
+    padding: 10px 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px;
+  }
+  .week-day strong { min-width: 40px; color: #1a3a5c; }
+  .week-day .slot {
+    flex: 1; color: #6a7890; font-size: 14px;
+  }
+  .week-day .slot.filled { color: #1a2340; font-weight: 500; }
+  .week-day button { padding: 6px 10px; font-size: 12px; }
+  .pantry-item {
+    background: #fff; border: 1px solid #e1e6ed; border-radius: 6px;
+    padding: 10px 12px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px;
+  }
+  .pantry-item input[type=checkbox] { width: 20px; height: 20px; }
+  .pantry-item.checked { background: #f0f8ef; text-decoration: line-through; color: #6a7890; }
+  .pantry-category { font-weight: 600; color: #1a3a5c; margin: 16px 0 6px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .history-item {
+    background: #fff; border: 1px solid #e1e6ed; border-radius: 6px;
+    padding: 10px 12px; margin-bottom: 6px; display: flex; justify-content: space-between;
+  }
+  .history-date { color: #6a7890; font-size: 13px; }
+  .ideas-form { background: #fff; border: 1px solid #e1e6ed; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  .ideas-form label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
+  .ideas-form select, .ideas-form input {
+    width: 100%; padding: 10px; border: 1px solid #cfd7e2; border-radius: 6px;
+    font-size: 14px; margin-bottom: 12px;
+  }
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100;
+    display: none; align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal-bg.active { display: flex; }
+  .modal {
+    background: #fff; border-radius: 12px; padding: 20px; max-width: 500px; width: 100%;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal h3 { margin: 0 0 12px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .modal input, .modal select, .modal textarea {
+    width: 100%; padding: 10px; border: 1px solid #cfd7e2; border-radius: 6px;
+    font-size: 14px; margin-bottom: 10px;
+  }
+  .modal label { font-weight: 600; font-size: 13px; margin-bottom: 4px; display: block; color: #4a5a75; }
+  .empty-state { text-align: center; padding: 40px 20px; color: #6a7890; }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: #1a3a5c; color: #fff; padding: 12px 20px; border-radius: 20px;
+    font-size: 14px; z-index: 200; opacity: 0; transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  .prompt-preview {
+    background: #f5f7fa; border: 1px solid #cfd7e2; border-radius: 6px;
+    padding: 12px; font-family: monospace; font-size: 12px; white-space: pre-wrap;
+    max-height: 200px; overflow-y: auto; margin-bottom: 10px;
+  }
+  .fab {
+    position: fixed; bottom: 20px; right: 20px; width: 56px; height: 56px;
+    border-radius: 50%; background: #c0392b; color: #fff; border: none;
+    font-size: 28px; cursor: pointer; box-shadow: 0 4px 12px rgba(192,57,43,0.4);
+    z-index: 30;
+  }
+  @media (max-width: 400px) {
+    nav button { font-size: 12px; padding: 12px 4px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🍽️ Pugh Family Dinners</h1>
+</header>
+
+<nav>
+  <button data-tab="library" class="active">Library</button>
+  <button data-tab="week">Week</button>
+  <button data-tab="pantry">Pantry</button>
+  <button data-tab="history">History</button>
+  <button data-tab="ideas">Ideas</button>
+</nav>
+
+<main>
+  <section id="library" class="active">
+    <h2>Meal Library</h2>
+    <div class="filters">
+      <select id="filter-protein"><option value="">All proteins</option></select>
+      <select id="filter-time"><option value="">Any cook time</option><option>Quick</option><option>Medium</option><option>Long</option></select>
+      <input type="search" id="filter-search" placeholder="Search...">
+    </div>
+    <div id="meal-list"></div>
+  </section>
+
+  <section id="week">
+    <h2>This Week</h2>
+    <div id="week-days"></div>
+    <button class="big-btn muted" onclick="clearWeek()">Clear Week</button>
+    <button class="big-btn" onclick="generateShoppingList()">📝 Generate Shopping List</button>
+  </section>
+
+  <section id="pantry">
+    <h2>Pantry</h2>
+    <p style="color: #6a7890; font-size: 13px; margin: 0 0 12px;">Check what you currently have. The Ideas tab uses this list.</p>
+    <div id="pantry-list"></div>
+    <button class="big-btn muted" onclick="addPantryItem()">+ Add Pantry Item</button>
+  </section>
+
+  <section id="history">
+    <h2>Recent Dinners</h2>
+    <p style="color: #6a7890; font-size: 13px; margin: 0 0 12px;">Last 30 days of dinners you've logged.</p>
+    <div id="history-list"></div>
+  </section>
+
+  <section id="ideas">
+    <h2>Meal Ideas</h2>
+    <div class="ideas-form">
+      <label>Get meal ideas for:</label>
+      <select id="idea-scope">
+        <option value="tonight">Tonight</option>
+        <option value="week">The whole week</option>
+      </select>
+      <label>Cook time preference:</label>
+      <select id="idea-time">
+        <option value="any">Any</option>
+        <option value="Quick">Quick (&lt;30 min)</option>
+        <option value="Medium">Medium (30-60 min)</option>
+        <option value="Long">Long (60+ min)</option>
+      </select>
+      <label><input type="checkbox" id="idea-pantry" checked> Use what's in pantry when possible</label>
+      <label><input type="checkbox" id="idea-kids" checked> Kid-friendly (Marcelle 5, Nora 3)</label>
+      <button class="big-btn accent" onclick="generateMealIdea()">💡 Get Meal Ideas</button>
+    </div>
+
+    <div class="ideas-form">
+      <label>Get a recipe for:</label>
+      <input type="text" id="recipe-name" placeholder="e.g. Chicken Burritos">
+      <button class="big-btn" onclick="generateRecipe()">🧑‍🍳 Get Recipe</button>
+    </div>
+
+    <div class="ideas-form">
+      <label style="margin-bottom: 10px;">Data Management</label>
+      <button class="big-btn muted" onclick="exportData()">⬇️ Export Data (backup)</button>
+      <button class="big-btn muted" onclick="importData()">⬆️ Import Data (restore)</button>
+      <p style="color: #6a7890; font-size: 12px; margin: 8px 0 0;">Phase 1: data lives on this device only. Use export/import to move between devices until Phase 2 sync ships.</p>
+    </div>
+  </section>
+</main>
+
+<button class="fab" onclick="openAddMealModal()" title="Add new meal">+</button>
+
+<div class="modal-bg" id="modal">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ==================== DATA ====================
+
+const DEFAULT_MEALS = [
+  // Chicken
+  {n:"Chicken Nachos",p:"Chicken",c:"Mexican",t:"Quick",i:"Chicken, tortilla chips, cheese, beans, salsa, sour cream",w:"Either",k:true},
+  {n:"Instapot Chicken Parm",p:"Chicken",c:"Comfort Food",t:"Medium",i:"Chicken breast, marinara, mozzarella, pasta",w:"Steph"},
+  {n:"Chicken Rice Etouffee",p:"Chicken",c:"Comfort Food",t:"Medium",i:"Chicken, rice, bell pepper, celery, onion, cajun seasoning",w:"Steph"},
+  {n:"Chicken Stew",p:"Chicken",c:"Soup/Stew",t:"Long",i:"Chicken, potatoes, carrots, celery, onion, broth",w:"Steph"},
+  {n:"Greek Chicken & Pita Casserole",p:"Chicken",c:"Casserole",t:"Medium",i:"Chicken, pitas, feta, tomato, cucumber, tzatziki",w:"Steph"},
+  {n:"Greek Pitas",p:"Chicken",c:"Quick & Easy",t:"Quick",i:"Chicken, pitas, feta, lettuce, tomato, tzatziki",w:"Either"},
+  {n:"Chicken Cacciatore (Crockpot)",p:"Chicken",c:"Slow Cooker",t:"Long",i:"Chicken, tomatoes, bell peppers, onion, Italian seasoning",w:"Steph"},
+  {n:"Chicken Burritos",p:"Chicken",c:"Mexican",t:"Quick",i:"Chicken, tortillas, rice, beans, cheese, salsa",w:"Either",k:true},
+  {n:"White Chicken Chili",p:"Chicken",c:"Soup/Stew",t:"Medium",i:"Chicken, white beans, green chiles, broth, sour cream",w:"Steph"},
+  {n:"Bang Bang Chicken and Rice",p:"Chicken",c:"Asian",t:"Medium",i:"Chicken, rice, bang bang sauce, lettuce",w:"Steph"},
+  {n:"Homemade Chicken Nuggets",p:"Chicken",c:"Kid Friendly",t:"Medium",i:"Chicken breast, breadcrumbs, egg",w:"Either",k:true},
+  {n:"Teriyaki Chicken with Rice",p:"Chicken",c:"Asian",t:"Medium",i:"Chicken, rice, teriyaki sauce, broccoli",w:"Either",k:true},
+  {n:"Bruschetta Chicken Bake",p:"Chicken",c:"Comfort Food",t:"Medium",i:"Chicken, tomatoes, basil, mozzarella, balsamic",w:"Steph",l:"2026-04-01"},
+  {n:"Chicken and Pasta Side",p:"Chicken",c:"Quick & Easy",t:"Quick",i:"Chicken, pasta, whatever sauce/seasoning",w:"Either",k:true},
+  {n:"Zucchini Pesto Chicken",p:"Chicken",c:"Healthy",t:"Medium",i:"Chicken, zucchini, pesto, parmesan",w:"Steph"},
+  {n:"Chicken w/ Sage Butter, Thyme & Parmesan Noodles",p:"Chicken",c:"Pasta",t:"Medium",i:"Chicken, butter, sage, thyme, parmesan, egg noodles",w:"Steph"},
+  {n:"Honey Lime Sweet Potato Black Bean Chicken Skillet",p:"Chicken",c:"Healthy",t:"Medium",i:"Chicken, sweet potato, black beans, lime, honey",w:"Steph"},
+  {n:"Pesto Chicken with Zucchini Noodles",p:"Chicken",c:"Healthy",t:"Medium",i:"Chicken, pesto, zucchini",w:"Steph"},
+  {n:"Orange Chicken Stir Fry",p:"Chicken",c:"Asian",t:"Medium",i:"Chicken, orange sauce, rice, stir fry veggies",w:"Steph"},
+  {n:"Fajitas",p:"Chicken",c:"Mexican",t:"Medium",i:"Chicken, bell peppers, onion, tortillas, seasoning",w:"Either"},
+  {n:"Stuffed Chicken",p:"Chicken",c:"Comfort Food",t:"Long",i:"Chicken breast, stuffing varies (spinach/cheese, etc.)",w:"Steph"},
+  {n:"Honey Mustard Pretzel Crusted Chicken",p:"Chicken",c:"Comfort Food",t:"Medium",i:"Chicken, pretzels, honey mustard, egg",w:"Steph"},
+  {n:"Lemon Rosemary Chicken and Potatoes",p:"Chicken",c:"Comfort Food",t:"Long",i:"Chicken, potatoes, lemon, rosemary, garlic",w:"Steph"},
+  {n:"Jerk Chicken",p:"Chicken",c:"Grill",t:"Medium",i:"Chicken, jerk seasoning/marinade, rice",w:"Either"},
+  {n:"Chicken Pot Pie",p:"Chicken",c:"Comfort Food",t:"Long",i:"Chicken, mixed veggies, cream, pie crust",w:"Steph"},
+  {n:"Chicken and Mac & Cheese",p:"Chicken",c:"Kid Friendly",t:"Medium",i:"Chicken, mac and cheese, breadcrumbs",w:"Either",k:true},
+  {n:"Buffalo Chicken Sliders",p:"Chicken",c:"Quick & Easy",t:"Quick",i:"Chicken, buffalo sauce, slider buns, ranch",w:"Either"},
+  {n:"Chicken Parm Sliders",p:"Chicken",c:"Quick & Easy",t:"Quick",i:"Chicken, marinara, mozzarella, slider buns",w:"Either",k:true},
+  {n:"Butter Chicken",p:"Chicken",c:"Asian",t:"Medium",i:"Chicken, butter chicken sauce, rice, naan",w:"Steph"},
+  {n:"Quesadillas",p:"Chicken",c:"Mexican",t:"Quick",i:"Chicken, tortillas, cheese, peppers",w:"Either",k:true},
+  {n:"Burrito Bowls",p:"Chicken",c:"Mexican",t:"Medium",i:"Chicken, rice, beans, corn, salsa, cheese, lettuce",w:"Either"},
+  {n:"Lettuce Wraps",p:"Chicken",c:"Asian",t:"Quick",i:"Chicken (or beef), lettuce, hoisin, soy sauce, water chestnuts",w:"Either"},
+  // Beef
+  {n:"Taco Salad",p:"Beef",c:"Mexican",t:"Quick",i:"Ground beef, lettuce, cheese, tortilla chips, salsa, sour cream",w:"Either"},
+  {n:"Tacos",p:"Beef",c:"Mexican",t:"Quick",i:"Ground beef, tortillas, cheese, lettuce, salsa",w:"Either",k:true},
+  {n:"Tater Tot Casserole",p:"Beef",c:"Casserole",t:"Medium",i:"Ground beef, tater tots, cheese, cream of mushroom",w:"Either",k:true},
+  {n:"Swedish Meatballs",p:"Beef",c:"Comfort Food",t:"Medium",i:"Meatballs, egg noodles, sour cream gravy",w:"Steph"},
+  {n:"Mexican Enchilada (Crockpot)",p:"Beef",c:"Slow Cooker",t:"Long",i:"Beef, enchilada sauce, tortillas, cheese, beans",w:"Steph"},
+  {n:"Shepherd's Pie",p:"Beef",c:"Comfort Food",t:"Long",i:"Ground beef, mashed potatoes, mixed veggies, gravy",w:"Steph"},
+  {n:"Mexican Tamale Pie",p:"Beef",c:"Mexican",t:"Medium",i:"Ground beef, cornbread, beans, cheese, enchilada sauce",w:"Steph"},
+  {n:"Beef Stroganoff",p:"Beef",c:"Comfort Food",t:"Medium",i:"Beef, egg noodles, mushrooms, sour cream",w:"Steph"},
+  {n:"Cheesy Beef Macaroni",p:"Beef",c:"Comfort Food",t:"Quick",i:"Ground beef, macaroni, cheese, tomato",w:"Either",k:true},
+  {n:"Burgers and Fries",p:"Beef",c:"Grill",t:"Quick",i:"Ground beef, buns, fries, toppings",w:"Either",k:true,l:"2026-03-30"},
+  {n:"Sloppy Joes",p:"Beef",c:"Quick & Easy",t:"Quick",i:"Ground beef, sloppy joe sauce, buns",w:"Either",k:true},
+  {n:"Beef Stew",p:"Beef",c:"Soup/Stew",t:"Long",i:"Beef, potatoes, carrots, celery, onion, broth",w:"Steph"},
+  {n:"Meatball Subs",p:"Beef",c:"Quick & Easy",t:"Quick",i:"Meatballs, sub rolls, marinara, mozzarella",w:"Either",k:true},
+  {n:"Lasagna",p:"Beef",c:"Pasta",t:"Long",i:"Ground beef, lasagna noodles, ricotta, mozzarella, marinara",w:"Steph",k:true,l:"2026-03-28"},
+  // Pasta
+  {n:"Baked Ziti",p:"Pasta",c:"Pasta",t:"Medium",i:"Ziti, ricotta, mozzarella, marinara, Italian sausage",w:"Steph"},
+  {n:"Baked Spaghetti Sauce",p:"Pasta",c:"Pasta",t:"Medium",i:"Spaghetti, meat sauce, cheese",w:"Steph",k:true},
+  {n:"Pasta & Sausage",p:"Pasta",c:"Pasta",t:"Quick",i:"Pasta, Italian sausage, peppers, onion",w:"Either"},
+  {n:"Pasta and Chicken",p:"Pasta",c:"Pasta",t:"Quick",i:"Pasta, chicken, sauce (varies)",w:"Either",k:true},
+  {n:"Shrimp Pasta",p:"Pasta",c:"Pasta",t:"Medium",i:"Shrimp, pasta, garlic, white wine/cream sauce",w:"Steph"},
+  {n:"Pasta Pizza Bake",p:"Pasta",c:"Pasta",t:"Medium",i:"Pasta, pizza sauce, pepperoni, mozzarella",w:"Either",k:true},
+  {n:"Spaghetti Squash",p:"Pasta",c:"Healthy",t:"Medium",i:"Spaghetti squash, marinara, parmesan",w:"Steph"},
+  // Soup & Stew
+  {n:"Sausage Tortellini Soup",p:"Other",c:"Soup/Stew",t:"Medium",i:"Italian sausage, tortellini, spinach, broth, tomatoes",w:"Steph"},
+  {n:"Tortilla Soup",p:"Chicken",c:"Soup/Stew",t:"Medium",i:"Chicken, broth, tomatoes, black beans, corn, tortilla strips",w:"Steph"},
+  {n:"Butternut Squash Soup",p:"Other",c:"Soup/Stew",t:"Medium",i:"Butternut squash, broth, cream, onion",w:"Steph"},
+  {n:"Chicken Quinoa Soup",p:"Chicken",c:"Soup/Stew",t:"Medium",i:"Chicken, quinoa, veggies, broth",w:"Steph"},
+  {n:"Minestrone Soup",p:"Other",c:"Soup/Stew",t:"Medium",i:"TBD — look up recipe if making again",w:"Either",l:"2026-04-02"},
+  // Slow Cooker / IP
+  {n:"Tomato Cream Cheese Tortellini (Crockpot)",p:"Other",c:"Slow Cooker",t:"Long",i:"Tortellini, tomatoes, cream cheese, Italian seasoning",w:"Steph",k:true},
+  {n:"Chicken Salad with Fruit",p:"Chicken",c:"Quick & Easy",t:"Quick",i:"Chicken, grapes, celery, mayo, pecans",w:"Either"},
+  // Pork
+  {n:"BBQ Pulled Pork (Crockpot)",p:"Pork",c:"Slow Cooker",t:"Long",i:"Pork shoulder, BBQ sauce, buns",w:"Steph",k:true},
+  {n:"Cream of Mushroom Pork (Crockpot)",p:"Pork",c:"Slow Cooker",t:"Long",i:"Pork chops, cream of mushroom soup, rice",w:"Steph"},
+  {n:"Ranch Pork Chops",p:"Pork",c:"Quick & Easy",t:"Quick",i:"Pork chops, ranch seasoning",w:"Either"},
+  {n:"Pork Chops in Creamy Irish Whiskey Sauce",p:"Pork",c:"Comfort Food",t:"Medium",i:"Pork chops, Irish whiskey, cream, mushrooms",w:"Steph"},
+  {n:"Apple Bourbon Smothered Pork Chops",p:"Pork",c:"Comfort Food",t:"Medium",i:"Pork chops, apple, bourbon, brown sugar",w:"Steph"},
+  {n:"Parmesan Crusted Pork Chops",p:"Pork",c:"Quick & Easy",t:"Quick",i:"Pork chops, parmesan, breadcrumbs",w:"Either"},
+  {n:"Honey Garlic Pork Chops",p:"Pork",c:"Quick & Easy",t:"Quick",i:"Pork chops, honey, garlic, soy sauce",w:"Either"},
+  // Seafood
+  {n:"Fish Tacos",p:"Seafood",c:"Mexican",t:"Medium",i:"White fish, tortillas, slaw, fish sauce",w:"Steph"},
+  {n:"Ahi Tuna Steaks",p:"Seafood",c:"Healthy",t:"Quick",i:"Ahi tuna, soy sauce, sesame",w:"Steph"},
+  {n:"Shrimp and Rice",p:"Seafood",c:"Quick & Easy",t:"Quick",i:"Shrimp, rice, garlic, butter",w:"Either"},
+  {n:"Shrimp Tacos",p:"Seafood",c:"Mexican",t:"Quick",i:"Shrimp, tortillas, slaw, lime",w:"Either"},
+  {n:"Honey Garlic Shrimp",p:"Seafood",c:"Asian",t:"Quick",i:"Shrimp, honey, garlic, soy sauce",w:"Either"},
+  {n:"Shrimp Sushi Stacks",p:"Seafood",c:"Asian",t:"Medium",i:"Shrimp, sushi rice, nori, avocado, soy sauce",w:"Steph"},
+  {n:"Butter Garlic Salmon",p:"Seafood",c:"Healthy",t:"Quick",i:"Salmon, butter, garlic, lemon",w:"Either"},
+  {n:"Salmon (Various)",p:"Seafood",c:"Healthy",t:"Quick",i:"Salmon, seasoning varies",w:"Either"},
+  // Other / Kid
+  {n:"Mini Pizzas",p:"Other",c:"Kid Friendly",t:"Quick",i:"English muffins or naan, pizza sauce, mozzarella, toppings",w:"Either",k:true},
+  {n:"Pizza (Frozen - Costco)",p:"Other",c:"Quick & Easy",t:"Quick",i:"Costco frozen pizza",w:"Either",k:true,l:"2026-03-27"},
+  {n:"Fish Sticks and Rice",p:"Seafood",c:"Kid Friendly",t:"Quick",i:"Frozen fish sticks, rice",w:"Either",k:true,l:"2026-03-29"},
+  {n:"Rice Pilaf",p:"Other",c:"Side/Light",t:"Medium",i:"Rice, broth, onion, herbs",w:"Either"},
+];
+
+const DEFAULT_PANTRY = {
+  "Proteins": ["Chicken breasts", "Ground beef", "Pork chops", "Salmon", "Shrimp", "Eggs"],
+  "Produce": ["Onions", "Garlic", "Bell peppers", "Celery", "Carrots", "Tomatoes", "Lettuce", "Potatoes", "Limes/Lemons"],
+  "Dairy": ["Cheese (shredded)", "Sour cream", "Butter", "Milk", "Parmesan"],
+  "Pantry Staples": ["Rice", "Pasta", "Tortillas", "Beans", "Broth", "Marinara", "Salsa", "Soy sauce", "Olive oil"],
+  "Freezer": ["Costco frozen pizza", "Fish sticks", "Frozen veggies", "Tater tots"]
+};
+
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+// ==================== STATE ====================
+
+const state = {
+  meals: [],
+  history: [],       // [{date: 'YYYY-MM-DD', meal: 'name'}]
+  week: {},          // {Mon: 'name', Tue: ...}
+  pantry: {},        // {'Chicken breasts': true, ...}
+  customPantry: {},  // user-added categories
+};
+
+function load() {
+  const saved = localStorage.getItem('pugh_meals_v1');
+  if (saved) {
+    try { Object.assign(state, JSON.parse(saved)); }
+    catch (e) { console.error(e); }
+  }
+  if (!state.meals || state.meals.length === 0) state.meals = [...DEFAULT_MEALS];
+  if (!state.history) state.history = [];
+  if (!state.week) state.week = {};
+  if (!state.pantry) state.pantry = {};
+  if (!state.customPantry) state.customPantry = {};
+}
+
+function save() {
+  localStorage.setItem('pugh_meals_v1', JSON.stringify(state));
+}
+
+// ==================== NAV ====================
+
+document.querySelectorAll('nav button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('section').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    document.getElementById(b.dataset.tab).classList.add('active');
+  });
+});
+
+// ==================== LIBRARY ====================
+
+function renderLibrary() {
+  const proteinSel = document.getElementById('filter-protein');
+  const proteins = [...new Set(state.meals.map(m => m.p))].sort();
+  proteinSel.innerHTML = '<option value="">All proteins</option>' +
+    proteins.map(p => `<option>${p}</option>`).join('');
+
+  const timeFilter = document.getElementById('filter-time').value;
+  const proteinFilter = document.getElementById('filter-protein').value;
+  const searchFilter = document.getElementById('filter-search').value.toLowerCase();
+
+  const list = document.getElementById('meal-list');
+  const filtered = state.meals.filter(m => {
+    if (timeFilter && m.t !== timeFilter) return false;
+    if (proteinFilter && m.p !== proteinFilter) return false;
+    if (searchFilter) {
+      const hay = (m.n + ' ' + m.i + ' ' + m.c).toLowerCase();
+      if (!hay.includes(searchFilter)) return false;
+    }
+    return true;
+  });
+
+  // Sort: longest since made first (encourage variety)
+  filtered.sort((a, b) => {
+    const aDays = daysSince(a.l);
+    const bDays = daysSince(b.l);
+    return bDays - aDays;
+  });
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="empty-state">No meals match those filters</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(m => {
+    const daysAgo = daysSince(m.l);
+    const dayTag = m.l ?
+      (daysAgo < 14 ? `<span class="recent">${daysAgo}d ago</span>` :
+       daysAgo > 60 ? `<span class="fresh">${daysAgo}d ago</span>` :
+       `<span>${daysAgo}d ago</span>`) :
+      '<span class="fresh">Never made</span>';
+    return `
+      <div class="meal-card">
+        <div class="meal-title">${m.n}</div>
+        <div class="meal-meta">
+          <span>${m.p}</span>
+          <span>${m.t}</span>
+          <span>${m.c}</span>
+          ${m.k ? '<span class="fresh">Kid approved</span>' : ''}
+          ${dayTag}
+        </div>
+        <div class="meal-ingredients">${m.i}</div>
+        <div class="meal-actions">
+          <button class="primary" onclick="hadTonight('${escapeQ(m.n)}')">Had this tonight</button>
+          <button class="secondary" onclick="addToWeek('${escapeQ(m.n)}')">Add to Week</button>
+          <button class="secondary" onclick="document.getElementById('recipe-name').value='${escapeQ(m.n)}'; switchTab('ideas'); generateRecipe();">Recipe</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function daysSince(dateStr) {
+  if (!dateStr) return 9999;
+  const then = new Date(dateStr);
+  const now = new Date();
+  return Math.floor((now - then) / (1000 * 60 * 60 * 24));
+}
+
+function escapeQ(s) { return (s || '').replace(/'/g, "\\'"); }
+
+function hadTonight(mealName) {
+  const meal = state.meals.find(m => m.n === mealName);
+  if (!meal) return;
+  const today = new Date().toISOString().split('T')[0];
+  meal.l = today;
+  state.history.unshift({date: today, meal: mealName});
+  state.history = state.history.slice(0, 180); // keep 6 months
+  save();
+  renderAll();
+  toast(`✓ Logged: ${mealName}`);
+}
+
+['filter-protein','filter-time','filter-search'].forEach(id => {
+  document.getElementById(id).addEventListener('input', renderLibrary);
+});
+
+// ==================== WEEK ====================
+
+function renderWeek() {
+  const el = document.getElementById('week-days');
+  el.innerHTML = DAYS.map(d => {
+    const meal = state.week[d];
+    return `
+      <div class="week-day">
+        <strong>${d}</strong>
+        <span class="slot ${meal ? 'filled' : ''}">${meal || '— empty —'}</span>
+        ${meal ? `<button class="secondary" onclick="removeFromWeek('${d}')">×</button>` : ''}
+      </div>`;
+  }).join('');
+}
+
+function addToWeek(mealName) {
+  const day = prompt("Which day? (Mon, Tue, Wed, Thu, Fri, Sat, Sun)");
+  if (!day) return;
+  const d = day.slice(0,1).toUpperCase() + day.slice(1,3).toLowerCase();
+  if (!DAYS.includes(d)) { toast("Day not recognized"); return; }
+  state.week[d] = mealName;
+  save();
+  renderAll();
+  toast(`${mealName} → ${d}`);
+}
+
+function removeFromWeek(day) {
+  delete state.week[day];
+  save();
+  renderAll();
+}
+
+function clearWeek() {
+  if (!confirm("Clear all meals from this week?")) return;
+  state.week = {};
+  save();
+  renderAll();
+}
+
+function generateShoppingList() {
+  const mealsThisWeek = Object.values(state.week);
+  if (mealsThisWeek.length === 0) { toast("No meals planned yet"); return; }
+  const allIngredients = mealsThisWeek.map(name => {
+    const m = state.meals.find(x => x.n === name);
+    return m ? `- ${m.n}: ${m.i}` : '';
+  }).filter(Boolean).join('\n');
+
+  const pantryItems = getPantryList();
+  const prompt = `I'm planning meals for the week. Here are the meals and their key ingredients:
+
+${allIngredients}
+
+Here's what I already have in my pantry:
+${pantryItems.length ? pantryItems.map(x => `- ${x}`).join('\n') : '(nothing checked)'}
+
+Generate a consolidated shopping list organized by grocery store section (Produce, Meat, Dairy, Pantry, Freezer). Skip anything I already have. Estimate quantities for a family of 4 (2 adults, kids ages 5 and 3).`;
+
+  openClaudeWithPrompt(prompt, "Shopping list");
+}
+
+// ==================== PANTRY ====================
+
+function renderPantry() {
+  const el = document.getElementById('pantry-list');
+  const categories = {...DEFAULT_PANTRY, ...state.customPantry};
+  el.innerHTML = Object.entries(categories).map(([cat, items]) => {
+    return `<div class="pantry-category">${cat}</div>` +
+      items.map(item => {
+        const checked = state.pantry[item] ? 'checked' : '';
+        const klass = state.pantry[item] ? 'checked' : '';
+        return `
+          <label class="pantry-item ${klass}">
+            <input type="checkbox" ${checked} onchange="togglePantry('${escapeQ(item)}')">
+            <span>${item}</span>
+          </label>`;
+      }).join('');
+  }).join('');
+}
+
+function togglePantry(item) {
+  state.pantry[item] = !state.pantry[item];
+  save();
+  renderPantry();
+}
+
+function getPantryList() {
+  return Object.keys(state.pantry).filter(k => state.pantry[k]);
+}
+
+function addPantryItem() {
+  const item = prompt("Add pantry item (e.g., 'Greek yogurt'):");
+  if (!item) return;
+  const cat = prompt("Which category? (Proteins, Produce, Dairy, Pantry Staples, Freezer, or a new one)");
+  if (!cat) return;
+  if (!state.customPantry[cat]) state.customPantry[cat] = [];
+  const existing = [...(DEFAULT_PANTRY[cat] || []), ...(state.customPantry[cat] || [])];
+  if (!existing.includes(item)) {
+    state.customPantry[cat] = [...(state.customPantry[cat] || []), item];
+  }
+  save();
+  renderPantry();
+}
+
+// ==================== HISTORY ====================
+
+function renderHistory() {
+  const el = document.getElementById('history-list');
+  const recent = state.history.slice(0, 30);
+  if (recent.length === 0) {
+    el.innerHTML = '<div class="empty-state">No dinners logged yet. Use "Had this tonight" on a meal.</div>';
+    return;
+  }
+  el.innerHTML = recent.map(h => `
+    <div class="history-item">
+      <span>${h.meal}</span>
+      <span class="history-date">${h.date}</span>
+    </div>`).join('');
+}
+
+// ==================== IDEAS ====================
+
+function generateMealIdea() {
+  const scope = document.getElementById('idea-scope').value;
+  const time = document.getElementById('idea-time').value;
+  const usePantry = document.getElementById('idea-pantry').checked;
+  const kids = document.getElementById('idea-kids').checked;
+
+  const recentMeals = state.history.slice(0, 20).map(h => h.meal);
+  const pantryItems = usePantry ? getPantryList() : [];
+
+  let prompt = `I need ${scope === 'tonight' ? 'a dinner idea for tonight' : 'dinner ideas for the week (7 meals)'}.
+
+Context for the Pugh family:
+- Family of 4: 2 adults, kids ages 5 and 3
+- ${kids ? 'Kids are picky — need kid-approved meals with familiar proteins and mild flavors' : 'No kid constraints'}
+- ${time !== 'any' ? `Prefer ${time} cook time (${time === 'Quick' ? 'under 30 min' : time === 'Medium' ? '30-60 min' : '60+ min'})` : 'Any cook time is fine'}
+
+Meals we've had RECENTLY (don't suggest these):
+${recentMeals.length ? recentMeals.map(m => `- ${m}`).join('\n') : '(none logged)'}
+
+${pantryItems.length ? `What's in our pantry right now (prioritize using these):\n${pantryItems.map(x => `- ${x}`).join('\n')}` : ''}
+
+${scope === 'tonight' ? 'Suggest 3 specific meal options with a 1-sentence description each. Pick from common family dinners — you don\'t need to be fancy.' : 'Suggest 7 meals for Mon-Sun, balanced across proteins (chicken, beef, pasta, pork, seafood), with 2-3 being Quick options for busy weeknights.'}`;
+
+  openClaudeWithPrompt(prompt, "Meal ideas");
+}
+
+function generateRecipe() {
+  const name = document.getElementById('recipe-name').value.trim();
+  if (!name) { toast("Type a meal name first"); return; }
+  const prompt = `Give me a recipe for ${name}.
+
+- Family of 4 (2 adults, kids 5 and 3)
+- Format: ingredients list first, then numbered steps
+- Keep it simple and weeknight-friendly
+- Include prep time and cook time at the top
+- If there's a good kid-friendly adaptation, note it`;
+
+  openClaudeWithPrompt(prompt, `Recipe for ${name}`);
+}
+
+function openClaudeWithPrompt(prompt, label) {
+  const modal = document.getElementById('modal');
+  const content = document.getElementById('modal-content');
+  const safePrompt = prompt.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
+  content.innerHTML = `
+    <h3>${label}</h3>
+    <div class="prompt-preview">${prompt.replace(/</g, '&lt;')}</div>
+    <p style="color: #6a7890; font-size: 12px; margin: 4px 0 10px;">Pick where to send this. ChatGPT auto-fills the prompt and you just hit Enter. Claude requires a quick paste (Ctrl+V or ⌘+V) since Claude doesn't allow URL pre-fill.</p>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Close</button>
+      <button class="secondary" onclick="copyAndOpenClaude(\`${safePrompt}\`)">📋 Copy & Open Claude</button>
+      <button class="primary" onclick="openChatGPT(\`${safePrompt}\`)">⚡ Open in ChatGPT</button>
+    </div>`;
+  modal.classList.add('active');
+}
+
+async function copyAndOpenClaude(prompt) {
+  try {
+    await navigator.clipboard.writeText(prompt);
+    toast("✓ Copied! Paste (Ctrl+V / ⌘+V) in Claude + Enter");
+    setTimeout(() => {
+      window.open('https://claude.ai/new', '_blank');
+      closeModal();
+    }, 800);
+  } catch (e) {
+    alert("Couldn't copy automatically. Select the prompt text in the preview box and copy it manually.");
+  }
+}
+
+function openChatGPT(prompt) {
+  const url = 'https://chatgpt.com/?q=' + encodeURIComponent(prompt) + '&hints=search';
+  window.open(url, '_blank');
+  closeModal();
+  toast("Opening ChatGPT with your prompt pre-filled");
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('active');
+}
+
+document.getElementById('modal').addEventListener('click', (e) => {
+  if (e.target.id === 'modal') closeModal();
+});
+
+// ==================== ADD MEAL ====================
+
+function openAddMealModal() {
+  const content = document.getElementById('modal-content');
+  content.innerHTML = `
+    <h3>Add Meal</h3>
+    <label>Meal Name</label>
+    <input id="am-name" placeholder="e.g. Taco Soup">
+    <label>Protein</label>
+    <select id="am-protein">
+      <option>Chicken</option><option>Beef</option><option>Pork</option>
+      <option>Seafood</option><option>Pasta</option><option>Other</option>
+    </select>
+    <label>Cook Time</label>
+    <select id="am-time"><option>Quick</option><option>Medium</option><option>Long</option></select>
+    <label>Category</label>
+    <input id="am-category" placeholder="e.g. Mexican, Comfort Food">
+    <label>Key Ingredients</label>
+    <textarea id="am-ingredients" rows="2" placeholder="comma-separated"></textarea>
+    <label>Who Cooks</label>
+    <select id="am-who"><option>Either</option><option>Steph</option><option>Stephen</option></select>
+    <label><input type="checkbox" id="am-kids"> Kid approved</label>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancel</button>
+      <button class="primary" onclick="saveNewMeal()">Save</button>
+    </div>`;
+  document.getElementById('modal').classList.add('active');
+}
+
+function saveNewMeal() {
+  const meal = {
+    n: document.getElementById('am-name').value.trim(),
+    p: document.getElementById('am-protein').value,
+    t: document.getElementById('am-time').value,
+    c: document.getElementById('am-category').value.trim() || 'Other',
+    i: document.getElementById('am-ingredients').value.trim(),
+    w: document.getElementById('am-who').value,
+    k: document.getElementById('am-kids').checked,
+  };
+  if (!meal.n) { alert("Name is required"); return; }
+  if (state.meals.find(m => m.n === meal.n)) { alert("That meal already exists"); return; }
+  state.meals.push(meal);
+  save();
+  closeModal();
+  renderLibrary();
+  toast(`✓ Added: ${meal.n}`);
+}
+
+// ==================== EXPORT / IMPORT ====================
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pugh-meals-${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast("✓ Backup downloaded");
+}
+
+function importData() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const imported = JSON.parse(text);
+      if (!confirm("This will replace all current data. Proceed?")) return;
+      Object.assign(state, imported);
+      save();
+      renderAll();
+      toast("✓ Data restored");
+    } catch (e) {
+      alert("Couldn't parse that file: " + e.message);
+    }
+  };
+  input.click();
+}
+
+// ==================== UTIL ====================
+
+function switchTab(name) {
+  document.querySelector(`nav button[data-tab="${name}"]`).click();
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+function renderAll() {
+  renderLibrary();
+  renderWeek();
+  renderPantry();
+  renderHistory();
+}
+
+// ==================== INIT ====================
+
+load();
+renderAll();
+</script>
+
+</body>
+</html>
