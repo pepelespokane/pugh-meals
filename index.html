@@ -12,6 +12,7 @@
 <meta http-equiv="Expires" content="0">
 <title>Pugh Family Dinners</title>
 <link rel="manifest" href="manifest.webmanifest">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
@@ -25,11 +26,16 @@
   header {
     background: #1a3a5c;
     color: #fff;
-    padding: 14px 16px;
+    padding: 10px 16px;
     position: sticky; top: 0; z-index: 50;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   }
-  h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header > div { max-width: 720px; margin: 0 auto; }
+  h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  #sync-indicator {
+    background: rgba(255,255,255,0.15); padding: 4px 10px; border-radius: 12px;
+    white-space: nowrap;
+  }
   h2 { margin: 0 0 12px; font-size: 18px; color: #1a3a5c; }
   nav {
     background: #fff; display: flex; overflow-x: auto;
@@ -152,7 +158,10 @@
 <body>
 
 <header>
-  <h1>🍽️ Pugh Family Dinners</h1>
+  <div style="display: flex; align-items: center; justify-content: space-between;">
+    <h1>🍽️ Pugh Family Dinners</h1>
+    <span id="sync-indicator" style="font-size: 12px; opacity: 0.9;">⋯</span>
+  </div>
 </header>
 
 <nav>
@@ -459,10 +468,14 @@ function hadTonight(mealName) {
   const today = new Date().toISOString().split('T')[0];
   meal.l = today;
   state.history.unshift({date: today, meal: mealName});
-  state.history = state.history.slice(0, 180); // keep 6 months
+  state.history = state.history.slice(0, 180);
   save();
   renderAll();
   toast(`✓ Logged: ${mealName}`);
+  cloudWrite(async () => {
+    await sb.from('dinner_history').insert({ meal_name: mealName, date: today });
+    await sb.from('meals').update({ last_made: today }).eq('name', mealName);
+  }, 'hadTonight');
 }
 
 ['filter-protein','filter-time','filter-search'].forEach(id => {
@@ -493,12 +506,18 @@ function addToWeek(mealName) {
   save();
   renderAll();
   toast(`${mealName} → ${d}`);
+  cloudWrite(async () => {
+    await sb.from('weekly_plan').upsert({ day: d, meal_name: mealName, updated_at: new Date().toISOString() });
+  }, 'addToWeek');
 }
 
 function removeFromWeek(day) {
   delete state.week[day];
   save();
   renderAll();
+  cloudWrite(async () => {
+    await sb.from('weekly_plan').delete().eq('day', day);
+  }, 'removeFromWeek');
 }
 
 function clearWeek() {
@@ -506,6 +525,9 @@ function clearWeek() {
   state.week = {};
   save();
   renderAll();
+  cloudWrite(async () => {
+    await sb.from('weekly_plan').delete().neq('day', '__none__');
+  }, 'clearWeek');
 }
 
 function generateShoppingList() {
@@ -552,6 +574,20 @@ function togglePantry(item) {
   state.pantry[item] = !state.pantry[item];
   save();
   renderPantry();
+  cloudWrite(async () => {
+    // Find category (default or custom)
+    let category = 'Other';
+    for (const [cat, items] of Object.entries(DEFAULT_PANTRY)) {
+      if (items.includes(item)) { category = cat; break; }
+    }
+    for (const [cat, items] of Object.entries(state.customPantry || {})) {
+      if (items.includes(item)) { category = cat; break; }
+    }
+    await sb.from('pantry').upsert({
+      item, category, is_stocked: !!state.pantry[item],
+      updated_at: new Date().toISOString()
+    });
+  }, 'togglePantry');
 }
 
 function getPantryList() {
@@ -568,8 +604,12 @@ function addPantryItem() {
   if (!existing.includes(item)) {
     state.customPantry[cat] = [...(state.customPantry[cat] || []), item];
   }
+  state.pantry[item] = true; // newly-added items assumed stocked
   save();
   renderPantry();
+  cloudWrite(async () => {
+    await sb.from('pantry').upsert({ item, category: cat, is_stocked: true });
+  }, 'addPantryItem');
 }
 
 // ==================== HISTORY ====================
@@ -597,12 +637,19 @@ function removeHistoryEntry(idx) {
   const entry = state.history[idx];
   if (!entry) return;
   if (!confirm(`Remove "${entry.meal}" from ${entry.date}?`)) return;
+  const { meal, date } = entry;
   state.history.splice(idx, 1);
-  // Recalculate last-made for the affected meal
-  recalculateLastMade(entry.meal);
+  recalculateLastMade(meal);
   save();
   renderAll();
   toast("✓ Removed");
+  cloudWrite(async () => {
+    await sb.from('dinner_history').delete().eq('meal_name', meal).eq('date', date);
+    const mealObj = state.meals.find(m => m.n === meal);
+    if (mealObj) {
+      await sb.from('meals').update({ last_made: mealObj.l || null }).eq('name', meal);
+    }
+  }, 'removeHistory');
 }
 
 function updateHistoryDate(idx, newDate) {
@@ -610,13 +657,22 @@ function updateHistoryDate(idx, newDate) {
   const entry = state.history[idx];
   if (!entry) return;
   const mealName = entry.meal;
+  const oldDate = entry.date;
   entry.date = newDate;
-  // Re-sort history by date descending
   state.history.sort((a, b) => b.date.localeCompare(a.date));
   recalculateLastMade(mealName);
   save();
   renderAll();
   toast("✓ Date updated");
+  cloudWrite(async () => {
+    // Delete old, insert new (simpler than finding the row id)
+    await sb.from('dinner_history').delete().eq('meal_name', mealName).eq('date', oldDate);
+    await sb.from('dinner_history').insert({ meal_name: mealName, date: newDate });
+    const mealObj = state.meals.find(m => m.n === mealName);
+    if (mealObj) {
+      await sb.from('meals').update({ last_made: mealObj.l || null }).eq('name', mealName);
+    }
+  }, 'updateHistoryDate');
 }
 
 function recalculateLastMade(mealName) {
@@ -657,6 +713,13 @@ function savePastMeal() {
   closeModal();
   renderAll();
   toast(`✓ Logged ${mealName} on ${date}`);
+  cloudWrite(async () => {
+    await sb.from('dinner_history').insert({ meal_name: mealName, date });
+    const mealObj = state.meals.find(m => m.n === mealName);
+    if (mealObj) {
+      await sb.from('meals').update({ last_made: mealObj.l || null }).eq('name', mealName);
+    }
+  }, 'savePastMeal');
 }
 
 // ==================== IDEAS ====================
@@ -789,8 +852,14 @@ function saveNewMeal() {
   state.meals.push(meal);
   save();
   closeModal();
-  renderLibrary();
+  renderAll();
   toast(`✓ Added: ${meal.n}`);
+  cloudWrite(async () => {
+    await sb.from('meals').insert({
+      name: meal.n, protein: meal.p, cook_time: meal.t, category: meal.c,
+      ingredients: meal.i, who_cooks: meal.w, kid_approved: meal.k
+    });
+  }, 'saveNewMeal');
 }
 
 // ==================== EXPORT / IMPORT ====================
@@ -849,10 +918,189 @@ function renderAll() {
   renderHistory();
 }
 
+// ==================== SUPABASE SYNC ====================
+
+const SUPABASE_URL = 'https://iwfbmlzffnojsqmwmnvn.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_KBVaAtUlX-_PEPQbE2TIZg_d35vVTrw';
+let sb = null;
+let realtimeChannel = null;
+
+function updateSync(status) {
+  const el = document.getElementById('sync-indicator');
+  if (!el) return;
+  const map = {
+    syncing: '↻ Syncing',
+    synced: '☁ Synced',
+    offline: '⚠ Offline',
+    error: '⚠ Error',
+  };
+  el.textContent = map[status] || '⋯';
+}
+
+async function initCloud() {
+  if (!window.supabase) { updateSync('offline'); return; }
+  try {
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    updateSync('syncing');
+
+    const [mealsRes, historyRes, weekRes, pantryRes] = await Promise.all([
+      sb.from('meals').select('*'),
+      sb.from('dinner_history').select('*').order('date', { ascending: false }).limit(180),
+      sb.from('weekly_plan').select('*'),
+      sb.from('pantry').select('*'),
+    ]);
+
+    if (mealsRes.error) throw mealsRes.error;
+    if (historyRes.error) throw historyRes.error;
+    if (weekRes.error) throw weekRes.error;
+    if (pantryRes.error) throw pantryRes.error;
+
+    if (mealsRes.data.length === 0) {
+      // Cloud empty — migrate localStorage → cloud (one-time)
+      await migrateLocalToCloud();
+    } else {
+      // Cloud has data — pull into state
+      pullCloudIntoState(mealsRes.data, historyRes.data, weekRes.data, pantryRes.data);
+      save();
+      renderAll();
+    }
+
+    subscribeToRealtime();
+    updateSync('synced');
+  } catch (e) {
+    console.warn('Cloud init failed:', e);
+    updateSync('offline');
+  }
+}
+
+function pullCloudIntoState(meals, history, week, pantry) {
+  state.meals = meals.map(m => ({
+    n: m.name, p: m.protein, t: m.cook_time, c: m.category,
+    i: m.ingredients, w: m.who_cooks, k: !!m.kid_approved,
+    l: m.last_made || undefined
+  }));
+  state.history = history.map(h => ({ date: h.date, meal: h.meal_name }));
+  state.week = {};
+  week.forEach(w => { if (w.meal_name) state.week[w.day] = w.meal_name; });
+  state.pantry = {};
+  state.customPantry = {};
+  const defaultItems = new Set();
+  Object.values(DEFAULT_PANTRY).forEach(arr => arr.forEach(i => defaultItems.add(i)));
+  pantry.forEach(p => {
+    if (p.is_stocked) state.pantry[p.item] = true;
+    if (!defaultItems.has(p.item)) {
+      if (!state.customPantry[p.category]) state.customPantry[p.category] = [];
+      if (!state.customPantry[p.category].includes(p.item)) {
+        state.customPantry[p.category].push(p.item);
+      }
+    }
+  });
+}
+
+async function migrateLocalToCloud() {
+  if (!sb) return;
+  try {
+    // Push meals
+    if (state.meals.length > 0) {
+      const rows = state.meals.map(m => ({
+        name: m.n, protein: m.p, cook_time: m.t, category: m.c,
+        ingredients: m.i, who_cooks: m.w || 'Either',
+        kid_approved: !!m.k, last_made: m.l || null
+      }));
+      await sb.from('meals').upsert(rows, { onConflict: 'name' });
+    }
+    // Push history
+    if (state.history && state.history.length > 0) {
+      await sb.from('dinner_history').insert(
+        state.history.map(h => ({ meal_name: h.meal, date: h.date }))
+      );
+    }
+    // Push week
+    const weekRows = Object.entries(state.week || {}).map(([day, meal]) => ({
+      day, meal_name: meal
+    }));
+    if (weekRows.length > 0) await sb.from('weekly_plan').upsert(weekRows);
+    // Push pantry (all defaults + customs)
+    const pantryRows = [];
+    Object.entries(DEFAULT_PANTRY).forEach(([cat, items]) => {
+      items.forEach(item => pantryRows.push({
+        item, category: cat, is_stocked: !!state.pantry[item]
+      }));
+    });
+    Object.entries(state.customPantry || {}).forEach(([cat, items]) => {
+      items.forEach(item => pantryRows.push({
+        item, category: cat, is_stocked: !!state.pantry[item]
+      }));
+    });
+    if (pantryRows.length > 0) await sb.from('pantry').upsert(pantryRows);
+  } catch (e) {
+    console.error('Migration failed:', e);
+    throw e;
+  }
+}
+
+function subscribeToRealtime() {
+  if (!sb) return;
+  if (realtimeChannel) sb.removeChannel(realtimeChannel);
+  realtimeChannel = sb
+    .channel('pugh-household')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'meals' }, () => refetchTable('meals'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'dinner_history' }, () => refetchTable('dinner_history'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_plan' }, () => refetchTable('weekly_plan'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'pantry' }, () => refetchTable('pantry'))
+    .subscribe();
+}
+
+async function refetchTable(tableName) {
+  if (!sb) return;
+  try {
+    if (tableName === 'meals') {
+      const { data } = await sb.from('meals').select('*');
+      if (data) {
+        state.meals = data.map(m => ({
+          n: m.name, p: m.protein, t: m.cook_time, c: m.category,
+          i: m.ingredients, w: m.who_cooks, k: !!m.kid_approved,
+          l: m.last_made || undefined
+        }));
+      }
+    } else if (tableName === 'dinner_history') {
+      const { data } = await sb.from('dinner_history').select('*').order('date', { ascending: false }).limit(180);
+      if (data) state.history = data.map(h => ({ date: h.date, meal: h.meal_name }));
+    } else if (tableName === 'weekly_plan') {
+      const { data } = await sb.from('weekly_plan').select('*');
+      if (data) {
+        state.week = {};
+        data.forEach(w => { if (w.meal_name) state.week[w.day] = w.meal_name; });
+      }
+    } else if (tableName === 'pantry') {
+      const { data } = await sb.from('pantry').select('*');
+      if (data) {
+        state.pantry = {};
+        data.forEach(p => { if (p.is_stocked) state.pantry[p.item] = true; });
+      }
+    }
+    save();
+    renderAll();
+  } catch (e) { console.warn('Refetch failed:', e); }
+}
+
+// Cloud write helpers — used alongside local state updates
+async function cloudWrite(fn, label) {
+  if (!sb) return;
+  try {
+    await fn();
+    updateSync('synced');
+  } catch (e) {
+    console.warn(`${label} sync failed:`, e);
+    updateSync('offline');
+  }
+}
+
 // ==================== INIT ====================
 
 load();
 renderAll();
+initCloud();
 
 // ==================== SERVICE WORKER / AUTO-UPDATE ====================
 
