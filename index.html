@@ -99,11 +99,44 @@
   .week-day button { padding: 6px 10px; font-size: 12px; }
   .pantry-item {
     background: #fff; border: 1px solid #e1e6ed; border-radius: 6px;
-    padding: 10px 12px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;
+    cursor: pointer;
   }
-  .pantry-item input[type=checkbox] { width: 20px; height: 20px; }
-  .pantry-item.checked { background: #f0f8ef; text-decoration: line-through; color: #6a7890; }
+  .pantry-item .pantry-name { flex: 1; }
+  .pantry-item.have { background: #f0faf1; border-color: #c5e4c9; }
+  .pantry-item.have .pantry-name { color: #2d6a3f; font-weight: 400; }
+  .pantry-item.need { background: #fef5f3; border-color: #f3c9c3; }
+  .pantry-item.need .pantry-name { color: #c0392b; font-weight: 700; }
+  .pantry-item button {
+    padding: 6px 8px; font-size: 13px; min-width: 30px;
+    border: 1px solid #cfd7e2; background: #fff; border-radius: 5px; cursor: pointer;
+  }
+  .pantry-item button.cart-btn { background: #fff; }
+  .pantry-item button.cart-btn:hover { background: #eef2f7; }
+  .pantry-item button.cart-btn.added { background: #c0392b; color: #fff; border-color: #c0392b; }
   .pantry-category { font-weight: 600; color: #1a3a5c; margin: 16px 0 6px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .pantry-toggle { display: flex; gap: 6px; margin-bottom: 12px; }
+  .pantry-toggle button {
+    flex: 1; padding: 8px; border: 1px solid #cfd7e2; background: #fff;
+    border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; color: #6a7890;
+  }
+  .pantry-toggle button.active { background: #1a3a5c; color: #fff; border-color: #1a3a5c; }
+  .shopping-item {
+    background: #fff; border: 1px solid #e1e6ed; border-radius: 6px;
+    padding: 10px 12px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;
+  }
+  .shopping-item .name { flex: 1; }
+  .shopping-item.saved { background: #fafbfc; opacity: 0.85; }
+  .shopping-item.saved .name { color: #6a7890; font-style: italic; }
+  .shopping-item button {
+    padding: 6px 10px; font-size: 13px;
+    border: 1px solid #cfd7e2; background: #fff; border-radius: 5px; cursor: pointer;
+  }
+  .recipe-view {
+    background: #fafbfc; border: 1px solid #e1e6ed; border-radius: 6px;
+    padding: 12px; font-size: 14px; line-height: 1.6; white-space: pre-wrap;
+    max-height: 400px; overflow-y: auto;
+  }
   .history-item {
     background: #fff; border: 1px solid #e1e6ed; border-radius: 6px;
     padding: 12px; margin-bottom: 6px; display: flex; justify-content: space-between;
@@ -183,6 +216,7 @@
   <button data-tab="library" class="active">Library</button>
   <button data-tab="week">Week</button>
   <button data-tab="pantry">Pantry</button>
+  <button data-tab="shopping">Shopping</button>
   <button data-tab="history">History</button>
   <button data-tab="ideas">Ideas</button>
 </nav>
@@ -195,6 +229,9 @@
       <select id="filter-time"><option value="">Any cook time</option><option>Quick</option><option>Medium</option><option>Long</option></select>
       <input type="search" id="filter-search" placeholder="Search...">
     </div>
+    <label style="display: block; margin-bottom: 12px; font-size: 14px;">
+      <input type="checkbox" id="filter-kids"> Kid approved only
+    </label>
     <div id="meal-list"></div>
   </section>
 
@@ -207,9 +244,31 @@
 
   <section id="pantry">
     <h2>Pantry</h2>
-    <p style="color: #6a7890; font-size: 13px; margin: 0 0 12px;">Check what you currently have. The Ideas tab uses this list.</p>
+    <p style="color: #6a7890; font-size: 13px; margin: 0 0 10px;">Click an item to toggle have/need. 🛒 adds it to your shopping list.</p>
+    <div class="pantry-toggle">
+      <button class="active" onclick="setPantryFilter('all')" data-pfilter="all">Show All</button>
+      <button onclick="setPantryFilter('have')" data-pfilter="have">✓ Have</button>
+      <button onclick="setPantryFilter('need')" data-pfilter="need">Need</button>
+    </div>
     <div id="pantry-list"></div>
     <button class="big-btn muted" onclick="addPantryItem()">+ Add Pantry Item</button>
+  </section>
+
+  <section id="shopping">
+    <h2>Shopping List</h2>
+    <div class="ideas-form" style="padding: 10px 12px;">
+      <label>Add item manually</label>
+      <div style="display: flex; gap: 6px;">
+        <input type="text" id="shopping-new" placeholder="e.g. Black beans, 2 cans"
+          onkeydown="if(event.key==='Enter')addShoppingManual()" style="margin: 0;">
+        <button class="primary" onclick="addShoppingManual()">Add</button>
+      </div>
+    </div>
+    <h3 style="font-size: 14px; color: #1a3a5c; margin: 16px 0 8px;">Active List</h3>
+    <div id="shopping-active"></div>
+    <h3 style="font-size: 14px; color: #1a3a5c; margin: 16px 0 8px;">Saved for Later</h3>
+    <div id="shopping-saved"></div>
+    <button class="big-btn muted" onclick="clearShoppingActive()" style="margin-top: 12px;">Clear Active List</button>
   </section>
 
   <section id="history">
@@ -237,6 +296,13 @@
       <label><input type="checkbox" id="idea-pantry" checked> Use what's in pantry when possible</label>
       <label><input type="checkbox" id="idea-kids" checked> Kid-friendly (Marcelle 5, Nora 3)</label>
       <button class="big-btn accent" onclick="generateMealIdea()">💡 Get Meal Ideas</button>
+    </div>
+
+    <div class="ideas-form">
+      <label style="font-weight: 600;">🔁 Bring back a favorite</label>
+      <p style="color: #6a7890; font-size: 13px; margin: 4px 0 10px;">Meals you've had in the last 3 months but not the last 3 weeks — time for a comeback.</p>
+      <button class="big-btn muted" onclick="bringBackFavorite()">Show me forgotten meals</button>
+      <div id="forgotten-list" style="margin-top: 10px;"></div>
     </div>
 
     <div class="ideas-form">
@@ -373,6 +439,8 @@ const state = {
   week: {},          // {Mon: 'name', Tue: ...}
   pantry: {},        // {'Chicken breasts': true, ...}
   customPantry: {},  // user-added categories
+  shoppingList: [],  // [{item, saved}]
+  pantryFilter: 'all',
 };
 
 function load() {
@@ -386,6 +454,8 @@ function load() {
   if (!state.week) state.week = {};
   if (!state.pantry) state.pantry = {};
   if (!state.customPantry) state.customPantry = {};
+  if (!state.shoppingList) state.shoppingList = [];
+  if (!state.pantryFilter) state.pantryFilter = 'all';
 }
 
 function save() {
@@ -417,11 +487,13 @@ function renderLibrary() {
   const timeFilter = document.getElementById('filter-time').value;
   const proteinFilter = document.getElementById('filter-protein').value;
   const searchFilter = document.getElementById('filter-search').value.toLowerCase();
+  const kidsOnly = document.getElementById('filter-kids').checked;
 
   const list = document.getElementById('meal-list');
   const filtered = state.meals.filter(m => {
     if (timeFilter && m.t !== timeFilter) return false;
     if (proteinFilter && m.p !== proteinFilter) return false;
+    if (kidsOnly && !m.k) return false;
     if (searchFilter) {
       const hay = (m.n + ' ' + m.i + ' ' + m.c).toLowerCase();
       if (!hay.includes(searchFilter)) return false;
@@ -429,12 +501,7 @@ function renderLibrary() {
     return true;
   });
 
-  // Sort: longest since made first (encourage variety)
-  filtered.sort((a, b) => {
-    const aDays = daysSince(a.l);
-    const bDays = daysSince(b.l);
-    return bDays - aDays;
-  });
+  filtered.sort((a, b) => daysSince(b.l) - daysSince(a.l));
 
   if (filtered.length === 0) {
     list.innerHTML = '<div class="empty-state">No meals match those filters</div>';
@@ -448,9 +515,10 @@ function renderLibrary() {
        daysAgo > 60 ? `<span class="fresh">${daysAgo}d ago</span>` :
        `<span>${daysAgo}d ago</span>`) :
       '<span class="fresh">Never made</span>';
+    const hasRecipe = m.recipe && m.recipe.trim().length > 0;
     return `
       <div class="meal-card">
-        <div class="meal-title">${m.n}</div>
+        <div class="meal-title">${m.n}${hasRecipe ? ' <span style="font-size: 13px;" title="Has saved recipe">📖</span>' : ''}</div>
         <div class="meal-meta">
           <span>${m.p}</span>
           <span>${m.t}</span>
@@ -462,7 +530,8 @@ function renderLibrary() {
         <div class="meal-actions">
           <button class="primary" onclick="hadTonight('${escapeQ(m.n)}')">Had this tonight</button>
           <button class="secondary" onclick="addToWeek('${escapeQ(m.n)}')">Add to Week</button>
-          <button class="secondary" onclick="document.getElementById('recipe-name').value='${escapeQ(m.n)}'; switchTab('ideas'); generateRecipe();">Recipe</button>
+          <button class="secondary" onclick="openRecipeModal('${escapeQ(m.n)}')">Recipe</button>
+          <button class="secondary" onclick="openEditMealModal('${escapeQ(m.n)}')">Edit</button>
         </div>
       </div>`;
   }).join('');
@@ -493,8 +562,9 @@ function hadTonight(mealName) {
   }, 'hadTonight');
 }
 
-['filter-protein','filter-time','filter-search'].forEach(id => {
+['filter-protein','filter-time','filter-search','filter-kids'].forEach(id => {
   document.getElementById(id).addEventListener('input', renderLibrary);
+  document.getElementById(id).addEventListener('change', renderLibrary);
 });
 
 // ==================== WEEK ====================
@@ -568,21 +638,61 @@ Generate a consolidated shopping list organized by grocery store section (Produc
 
 // ==================== PANTRY ====================
 
+function setPantryFilter(filter) {
+  state.pantryFilter = filter;
+  document.querySelectorAll('[data-pfilter]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.pfilter === filter);
+  });
+  save();
+  renderPantry();
+}
+
+function isOnShoppingList(item) {
+  return state.shoppingList.some(s => s.item.toLowerCase() === item.toLowerCase());
+}
+
 function renderPantry() {
   const el = document.getElementById('pantry-list');
-  const categories = {...DEFAULT_PANTRY, ...state.customPantry};
+  const deleted = new Set(state.deletedDefaults || []);
+  const categories = {};
+  Object.entries(DEFAULT_PANTRY).forEach(([cat, items]) => {
+    categories[cat] = items.filter(i => !deleted.has(i));
+  });
+  Object.entries(state.customPantry || {}).forEach(([cat, items]) => {
+    categories[cat] = [...(categories[cat] || []), ...items];
+  });
+
+  const filter = state.pantryFilter || 'all';
+  let totalShown = 0;
+
   el.innerHTML = Object.entries(categories).map(([cat, items]) => {
+    const filteredItems = items.filter(item => {
+      const have = !!state.pantry[item];
+      if (filter === 'have' && !have) return false;
+      if (filter === 'need' && have) return false;
+      return true;
+    });
+    if (filteredItems.length === 0) return '';
+    totalShown += filteredItems.length;
     return `<div class="pantry-category">${cat}</div>` +
-      items.map(item => {
-        const checked = state.pantry[item] ? 'checked' : '';
-        const klass = state.pantry[item] ? 'checked' : '';
+      filteredItems.map(item => {
+        const have = !!state.pantry[item];
+        const klass = have ? 'have' : 'need';
+        const onList = isOnShoppingList(item);
         return `
-          <label class="pantry-item ${klass}">
-            <input type="checkbox" ${checked} onchange="togglePantry('${escapeQ(item)}')">
-            <span>${item}</span>
-          </label>`;
+          <div class="pantry-item ${klass}">
+            <span class="pantry-name" onclick="togglePantry('${escapeQ(item)}')">${have ? '✓ ' : ''}${item}</span>
+            <button class="cart-btn ${onList ? 'added' : ''}" title="${onList ? 'On shopping list' : 'Add to shopping list'}"
+              onclick="addPantryToShopping('${escapeQ(item)}')">🛒</button>
+            <button title="Edit" onclick="editPantryItem('${escapeQ(item)}')">✎</button>
+            <button title="Delete" onclick="deletePantryItem('${escapeQ(item)}')">✕</button>
+          </div>`;
       }).join('');
   }).join('');
+
+  if (totalShown === 0) {
+    el.innerHTML = '<div class="empty-state">No items match this filter</div>';
+  }
 }
 
 function togglePantry(item) {
@@ -619,12 +729,91 @@ function addPantryItem() {
   if (!existing.includes(item)) {
     state.customPantry[cat] = [...(state.customPantry[cat] || []), item];
   }
-  state.pantry[item] = true; // newly-added items assumed stocked
+  state.pantry[item] = true;
   save();
   renderPantry();
   cloudWrite(async () => {
     await sb.from('pantry').upsert({ item, category: cat, is_stocked: true });
   }, 'addPantryItem');
+}
+
+function editPantryItem(oldItem) {
+  const newItem = prompt("Rename pantry item:", oldItem);
+  if (!newItem || newItem === oldItem) return;
+  // Update in default/custom lists
+  for (const [cat, items] of Object.entries(state.customPantry || {})) {
+    const idx = items.indexOf(oldItem);
+    if (idx >= 0) { items[idx] = newItem; break; }
+  }
+  // If it was a default item, add the renamed version as custom and hide the default via a flag
+  const isDefault = Object.values(DEFAULT_PANTRY).some(arr => arr.includes(oldItem));
+  if (isDefault) {
+    // Find the default category
+    let cat = 'Other';
+    for (const [c, items] of Object.entries(DEFAULT_PANTRY)) {
+      if (items.includes(oldItem)) { cat = c; break; }
+    }
+    if (!state.customPantry[cat]) state.customPantry[cat] = [];
+    if (!state.customPantry[cat].includes(newItem)) state.customPantry[cat].push(newItem);
+    // Track deleted defaults
+    if (!state.deletedDefaults) state.deletedDefaults = [];
+    if (!state.deletedDefaults.includes(oldItem)) state.deletedDefaults.push(oldItem);
+  }
+  if (state.pantry[oldItem]) {
+    state.pantry[newItem] = true;
+    delete state.pantry[oldItem];
+  }
+  save();
+  renderPantry();
+  cloudWrite(async () => {
+    await sb.from('pantry').delete().eq('item', oldItem);
+    let cat = 'Other';
+    for (const [c, items] of Object.entries(DEFAULT_PANTRY)) {
+      if (items.includes(oldItem)) { cat = c; break; }
+    }
+    for (const [c, items] of Object.entries(state.customPantry || {})) {
+      if (items.includes(newItem)) { cat = c; break; }
+    }
+    await sb.from('pantry').upsert({ item: newItem, category: cat, is_stocked: !!state.pantry[newItem] });
+  }, 'editPantryItem');
+  toast(`Renamed → ${newItem}`);
+}
+
+function deletePantryItem(item) {
+  if (!confirm(`Remove "${item}" from pantry?`)) return;
+  // Remove from custom
+  for (const [cat, items] of Object.entries(state.customPantry || {})) {
+    const idx = items.indexOf(item);
+    if (idx >= 0) items.splice(idx, 1);
+  }
+  // Mark default as deleted
+  const isDefault = Object.values(DEFAULT_PANTRY).some(arr => arr.includes(item));
+  if (isDefault) {
+    if (!state.deletedDefaults) state.deletedDefaults = [];
+    if (!state.deletedDefaults.includes(item)) state.deletedDefaults.push(item);
+  }
+  delete state.pantry[item];
+  save();
+  renderPantry();
+  cloudWrite(async () => {
+    await sb.from('pantry').delete().eq('item', item);
+  }, 'deletePantryItem');
+  toast(`Removed: ${item}`);
+}
+
+function addPantryToShopping(item) {
+  if (isOnShoppingList(item)) {
+    toast(`Already on shopping list`);
+    return;
+  }
+  state.shoppingList.unshift({ item, saved: false });
+  save();
+  renderPantry();
+  renderShopping();
+  toast(`🛒 Added ${item}`);
+  cloudWrite(async () => {
+    await sb.from('shopping_list').insert({ item, saved_for_later: false });
+  }, 'addPantryToShopping');
 }
 
 // ==================== HISTORY ====================
@@ -734,6 +923,210 @@ function savePastMeal() {
   }, 'savePastMeal');
 }
 
+// ==================== SHOPPING LIST ====================
+
+function renderShopping() {
+  const active = state.shoppingList.filter(s => !s.saved);
+  const saved = state.shoppingList.filter(s => s.saved);
+  const activeEl = document.getElementById('shopping-active');
+  const savedEl = document.getElementById('shopping-saved');
+  if (!activeEl || !savedEl) return;
+
+  if (active.length === 0) {
+    activeEl.innerHTML = '<div class="empty-state" style="padding: 20px;">Nothing to buy. Add items from Pantry tab or manually above.</div>';
+  } else {
+    activeEl.innerHTML = active.map(s => `
+      <div class="shopping-item">
+        <span class="name">${s.item}</span>
+        <button title="Save for later" onclick="moveShopping('${escapeQ(s.item)}', true)">💾</button>
+        <button title="Remove" onclick="removeShopping('${escapeQ(s.item)}')">✕</button>
+      </div>`).join('');
+  }
+  if (saved.length === 0) {
+    savedEl.innerHTML = '<div style="color: #6a7890; font-size: 13px; padding: 8px;">Nothing saved for later.</div>';
+  } else {
+    savedEl.innerHTML = saved.map(s => `
+      <div class="shopping-item saved">
+        <span class="name">${s.item}</span>
+        <button title="Move to active list" onclick="moveShopping('${escapeQ(s.item)}', false)">⬆</button>
+        <button title="Remove" onclick="removeShopping('${escapeQ(s.item)}')">✕</button>
+      </div>`).join('');
+  }
+}
+
+function addShoppingManual() {
+  const input = document.getElementById('shopping-new');
+  const item = (input.value || '').trim();
+  if (!item) return;
+  if (isOnShoppingList(item)) { toast("Already on list"); return; }
+  state.shoppingList.unshift({ item, saved: false });
+  input.value = '';
+  save();
+  renderShopping();
+  renderPantry();
+  toast(`🛒 Added ${item}`);
+  cloudWrite(async () => {
+    await sb.from('shopping_list').insert({ item, saved_for_later: false });
+  }, 'addShoppingManual');
+}
+
+function removeShopping(itemName) {
+  const idx = state.shoppingList.findIndex(s => s.item === itemName);
+  if (idx < 0) return;
+  state.shoppingList.splice(idx, 1);
+  save();
+  renderShopping();
+  renderPantry();
+  cloudWrite(async () => {
+    await sb.from('shopping_list').delete().eq('item', itemName);
+  }, 'removeShopping');
+}
+
+function moveShopping(itemName, saveForLater) {
+  const entry = state.shoppingList.find(s => s.item === itemName);
+  if (!entry) return;
+  entry.saved = saveForLater;
+  save();
+  renderShopping();
+  toast(saveForLater ? "Moved to saved for later" : "Back to active list");
+  cloudWrite(async () => {
+    await sb.from('shopping_list').update({ saved_for_later: saveForLater }).eq('item', itemName);
+  }, 'moveShopping');
+}
+
+function clearShoppingActive() {
+  const active = state.shoppingList.filter(s => !s.saved);
+  if (active.length === 0) return;
+  if (!confirm(`Remove all ${active.length} active items?`)) return;
+  state.shoppingList = state.shoppingList.filter(s => s.saved);
+  save();
+  renderShopping();
+  renderPantry();
+  toast("Active list cleared");
+  cloudWrite(async () => {
+    await sb.from('shopping_list').delete().eq('saved_for_later', false);
+  }, 'clearShoppingActive');
+}
+
+// ==================== RECIPE + EDIT MEAL ====================
+
+function openRecipeModal(mealName) {
+  const meal = state.meals.find(m => m.n === mealName);
+  if (!meal) return;
+  const hasRecipe = meal.recipe && meal.recipe.trim().length > 0;
+  const content = document.getElementById('modal-content');
+  content.innerHTML = `
+    <h3>${meal.n}</h3>
+    <div style="color: #6a7890; font-size: 13px; margin-bottom: 10px;">${meal.i}</div>
+    ${hasRecipe
+      ? `<div class="recipe-view">${meal.recipe.replace(/</g, '&lt;')}</div>
+         <div class="modal-actions">
+           <button class="secondary" onclick="closeModal()">Close</button>
+           <button class="secondary" onclick="editRecipe('${escapeQ(meal.n)}')">✎ Edit recipe</button>
+           <button class="primary" onclick="findDifferentRecipe('${escapeQ(meal.n)}')">Different recipe →</button>
+         </div>`
+      : `<p style="color: #6a7890; font-size: 14px;">No saved recipe yet.</p>
+         <div class="modal-actions">
+           <button class="secondary" onclick="closeModal()">Close</button>
+           <button class="secondary" onclick="editRecipe('${escapeQ(meal.n)}')">✎ Add recipe</button>
+           <button class="primary" onclick="findDifferentRecipe('${escapeQ(meal.n)}')">Search for a recipe →</button>
+         </div>`}`;
+  document.getElementById('modal').classList.add('active');
+}
+
+function editRecipe(mealName) {
+  const meal = state.meals.find(m => m.n === mealName);
+  if (!meal) return;
+  const content = document.getElementById('modal-content');
+  content.innerHTML = `
+    <h3>Recipe for ${meal.n}</h3>
+    <p style="color: #6a7890; font-size: 13px;">Paste or type your recipe. Formatting is preserved.</p>
+    <textarea id="recipe-text" rows="14" style="width: 100%; font-family: inherit; font-size: 14px; line-height: 1.5; padding: 10px; border: 1px solid #cfd7e2; border-radius: 6px;">${meal.recipe || ''}</textarea>
+    <div class="modal-actions">
+      <button class="secondary" onclick="openRecipeModal('${escapeQ(mealName)}')">Cancel</button>
+      <button class="primary" onclick="saveRecipe('${escapeQ(mealName)}')">Save</button>
+    </div>`;
+}
+
+function saveRecipe(mealName) {
+  const meal = state.meals.find(m => m.n === mealName);
+  if (!meal) return;
+  const text = document.getElementById('recipe-text').value.trim();
+  meal.recipe = text || null;
+  save();
+  closeModal();
+  renderLibrary();
+  toast(text ? "✓ Recipe saved" : "✓ Recipe cleared");
+  cloudWrite(async () => {
+    await sb.from('meals').update({ recipe: text || null }).eq('name', mealName);
+  }, 'saveRecipe');
+}
+
+function findDifferentRecipe(mealName) {
+  const prompt = `Give me a different recipe for ${mealName}.
+
+- Family of 4 (2 adults, kids 5 and 3)
+- Format: ingredients list first, then numbered steps
+- Keep it simple and weeknight-friendly
+- Include prep time and cook time at the top
+- Make it notably different from standard versions (e.g., different flavor profile, cooking method, or cuisine twist)`;
+  openClaudeWithPrompt(prompt, `Different recipe: ${mealName}`);
+}
+
+function openEditMealModal(mealName) {
+  const meal = state.meals.find(m => m.n === mealName);
+  if (!meal) return;
+  const content = document.getElementById('modal-content');
+  content.innerHTML = `
+    <h3>Edit ${meal.n}</h3>
+    <label>Ingredients (comma-separated)</label>
+    <textarea id="edit-ingredients" rows="3">${meal.i || ''}</textarea>
+    <label>Protein</label>
+    <select id="edit-protein">
+      ${['Chicken','Beef','Pork','Seafood','Pasta','Other'].map(p =>
+        `<option${meal.p === p ? ' selected' : ''}>${p}</option>`).join('')}
+    </select>
+    <label>Cook Time</label>
+    <select id="edit-time">
+      ${['Quick','Medium','Long'].map(t =>
+        `<option${meal.t === t ? ' selected' : ''}>${t}</option>`).join('')}
+    </select>
+    <label>Category</label>
+    <input id="edit-category" value="${(meal.c || '').replace(/"/g, '&quot;')}">
+    <label>Who Cooks</label>
+    <select id="edit-who">
+      ${['Either','Steph','Stephen'].map(w =>
+        `<option${meal.w === w ? ' selected' : ''}>${w}</option>`).join('')}
+    </select>
+    <label><input type="checkbox" id="edit-kids" ${meal.k ? 'checked' : ''}> Kid approved</label>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancel</button>
+      <button class="primary" onclick="saveEditMeal('${escapeQ(mealName)}')">Save</button>
+    </div>`;
+  document.getElementById('modal').classList.add('active');
+}
+
+function saveEditMeal(oldName) {
+  const meal = state.meals.find(m => m.n === oldName);
+  if (!meal) return;
+  meal.i = document.getElementById('edit-ingredients').value.trim();
+  meal.p = document.getElementById('edit-protein').value;
+  meal.t = document.getElementById('edit-time').value;
+  meal.c = document.getElementById('edit-category').value.trim() || 'Other';
+  meal.w = document.getElementById('edit-who').value;
+  meal.k = document.getElementById('edit-kids').checked;
+  save();
+  closeModal();
+  renderLibrary();
+  toast("✓ Meal updated");
+  cloudWrite(async () => {
+    await sb.from('meals').update({
+      ingredients: meal.i, protein: meal.p, cook_time: meal.t,
+      category: meal.c, who_cooks: meal.w, kid_approved: !!meal.k
+    }).eq('name', oldName);
+  }, 'saveEditMeal');
+}
+
 // ==================== IDEAS ====================
 
 function generateMealIdea() {
@@ -765,6 +1158,12 @@ ${scope === 'tonight' ? 'Suggest 3 specific meal options with a 1-sentence descr
 function generateRecipe() {
   const name = document.getElementById('recipe-name').value.trim();
   if (!name) { toast("Type a meal name first"); return; }
+  // If the meal exists in the library and has a recipe, show that first
+  const meal = state.meals.find(m => m.n.toLowerCase() === name.toLowerCase());
+  if (meal && meal.recipe && meal.recipe.trim()) {
+    openRecipeModal(meal.n);
+    return;
+  }
   const prompt = `Give me a recipe for ${name}.
 
 - Family of 4 (2 adults, kids 5 and 3)
@@ -774,6 +1173,38 @@ function generateRecipe() {
 - If there's a good kid-friendly adaptation, note it`;
 
   openClaudeWithPrompt(prompt, `Recipe for ${name}`);
+}
+
+function bringBackFavorite() {
+  // Meals eaten between 21 days and 90 days ago
+  const qualifying = state.meals.filter(m => {
+    if (!m.l) return false;
+    const d = daysSince(m.l);
+    return d >= 21 && d <= 90;
+  });
+  qualifying.sort((a, b) => daysSince(b.l) - daysSince(a.l));
+
+  const el = document.getElementById('forgotten-list');
+  if (qualifying.length === 0) {
+    el.innerHTML = `<div class="empty-state" style="padding: 20px;">
+      No meals qualify yet. Come back once something's been on the shelf for 3+ weeks but is still recent enough to remember fondly.
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = qualifying.slice(0, 8).map(m => `
+    <div class="meal-card" style="margin-bottom: 8px;">
+      <div class="meal-title">${m.n}</div>
+      <div class="meal-meta">
+        <span>${m.p}</span><span>${m.t}</span>
+        <span>${daysSince(m.l)}d ago</span>
+      </div>
+      <div class="meal-ingredients">${m.i}</div>
+      <div class="meal-actions">
+        <button class="primary" onclick="addToWeek('${escapeQ(m.n)}')">Add to Week</button>
+        <button class="secondary" onclick="openRecipeModal('${escapeQ(m.n)}')">Recipe</button>
+      </div>
+    </div>`).join('');
 }
 
 function openClaudeWithPrompt(prompt, label) {
@@ -927,6 +1358,7 @@ function renderAll() {
   renderLibrary();
   renderWeek();
   renderPantry();
+  renderShopping();
   renderHistory();
 }
 
@@ -955,24 +1387,24 @@ async function initCloud() {
     sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     updateSync('syncing');
 
-    const [mealsRes, historyRes, weekRes, pantryRes] = await Promise.all([
+    const [mealsRes, historyRes, weekRes, pantryRes, shoppingRes] = await Promise.all([
       sb.from('meals').select('*'),
       sb.from('dinner_history').select('*').order('date', { ascending: false }).limit(180),
       sb.from('weekly_plan').select('*'),
       sb.from('pantry').select('*'),
+      sb.from('shopping_list').select('*').order('added_at', { ascending: false }),
     ]);
 
     if (mealsRes.error) throw mealsRes.error;
     if (historyRes.error) throw historyRes.error;
     if (weekRes.error) throw weekRes.error;
     if (pantryRes.error) throw pantryRes.error;
+    if (shoppingRes.error) throw shoppingRes.error;
 
     if (mealsRes.data.length === 0) {
-      // Cloud empty — migrate localStorage → cloud (one-time)
       await migrateLocalToCloud();
     } else {
-      // Cloud has data — pull into state
-      pullCloudIntoState(mealsRes.data, historyRes.data, weekRes.data, pantryRes.data);
+      pullCloudIntoState(mealsRes.data, historyRes.data, weekRes.data, pantryRes.data, shoppingRes.data);
       save();
       renderAll();
     }
@@ -985,11 +1417,12 @@ async function initCloud() {
   }
 }
 
-function pullCloudIntoState(meals, history, week, pantry) {
+function pullCloudIntoState(meals, history, week, pantry, shopping) {
   state.meals = meals.map(m => ({
     n: m.name, p: m.protein, t: m.cook_time, c: m.category,
     i: m.ingredients, w: m.who_cooks, k: !!m.kid_approved,
-    l: m.last_made || undefined
+    l: m.last_made || undefined,
+    recipe: m.recipe || null
   }));
   state.history = history.map(h => ({ date: h.date, meal: h.meal_name }));
   state.week = {};
@@ -1007,6 +1440,9 @@ function pullCloudIntoState(meals, history, week, pantry) {
       }
     }
   });
+  state.shoppingList = (shopping || []).map(s => ({
+    item: s.item, saved: !!s.saved_for_later
+  }));
 }
 
 async function migrateLocalToCloud() {
@@ -1060,6 +1496,7 @@ function subscribeToRealtime() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'dinner_history' }, () => refetchTable('dinner_history'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_plan' }, () => refetchTable('weekly_plan'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'pantry' }, () => refetchTable('pantry'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'shopping_list' }, () => refetchTable('shopping_list'))
     .subscribe();
 }
 
@@ -1072,7 +1509,8 @@ async function refetchTable(tableName) {
         state.meals = data.map(m => ({
           n: m.name, p: m.protein, t: m.cook_time, c: m.category,
           i: m.ingredients, w: m.who_cooks, k: !!m.kid_approved,
-          l: m.last_made || undefined
+          l: m.last_made || undefined,
+          recipe: m.recipe || null
         }));
       }
     } else if (tableName === 'dinner_history') {
@@ -1089,6 +1527,11 @@ async function refetchTable(tableName) {
       if (data) {
         state.pantry = {};
         data.forEach(p => { if (p.is_stocked) state.pantry[p.item] = true; });
+      }
+    } else if (tableName === 'shopping_list') {
+      const { data } = await sb.from('shopping_list').select('*').order('added_at', { ascending: false });
+      if (data) {
+        state.shoppingList = data.map(s => ({ item: s.item, saved: !!s.saved_for_later }));
       }
     }
     save();
