@@ -666,12 +666,14 @@ function renderPantry() {
   let totalShown = 0;
 
   el.innerHTML = Object.entries(categories).map(([cat, items]) => {
-    const filteredItems = items.filter(item => {
-      const have = !!state.pantry[item];
-      if (filter === 'have' && !have) return false;
-      if (filter === 'need' && have) return false;
-      return true;
-    });
+    const filteredItems = items
+      .filter(item => {
+        const have = !!state.pantry[item];
+        if (filter === 'have' && !have) return false;
+        if (filter === 'need' && have) return false;
+        return true;
+      })
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     if (filteredItems.length === 0) return '';
     totalShown += filteredItems.length;
     return `<div class="pantry-category">${cat}</div>` +
@@ -720,20 +722,55 @@ function getPantryList() {
 }
 
 function addPantryItem() {
-  const item = prompt("Add pantry item (e.g., 'Greek yogurt'):");
-  if (!item) return;
-  const cat = prompt("Which category? (Proteins, Produce, Dairy, Pantry Staples, Freezer, or a new one)");
-  if (!cat) return;
+  const allCategories = new Set([
+    ...Object.keys(DEFAULT_PANTRY),
+    ...Object.keys(state.customPantry || {})
+  ]);
+  const sortedCats = [...allCategories].sort();
+  const content = document.getElementById('modal-content');
+  content.innerHTML = `
+    <h3>Add Pantry Item</h3>
+    <label>Item name</label>
+    <input id="ap-name" placeholder="e.g. Greek yogurt" autofocus>
+    <label>Category</label>
+    <select id="ap-category" onchange="document.getElementById('ap-newcat-wrap').style.display = this.value === '__new__' ? 'block' : 'none';">
+      ${sortedCats.map(c => `<option value="${c}">${c}</option>`).join('')}
+      <option value="__new__">+ New category…</option>
+    </select>
+    <div id="ap-newcat-wrap" style="display: none;">
+      <label>New category name</label>
+      <input id="ap-newcat" placeholder="e.g. Spices, Beverages">
+    </div>
+    <label><input type="checkbox" id="ap-stocked" checked> I currently have this</label>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancel</button>
+      <button class="primary" onclick="savePantryItem()">Add</button>
+    </div>`;
+  document.getElementById('modal').classList.add('active');
+}
+
+function savePantryItem() {
+  const item = document.getElementById('ap-name').value.trim();
+  if (!item) { toast("Item name required"); return; }
+  let cat = document.getElementById('ap-category').value;
+  if (cat === '__new__') {
+    cat = document.getElementById('ap-newcat').value.trim();
+    if (!cat) { toast("New category name required"); return; }
+  }
+  const stocked = document.getElementById('ap-stocked').checked;
+
   if (!state.customPantry[cat]) state.customPantry[cat] = [];
   const existing = [...(DEFAULT_PANTRY[cat] || []), ...(state.customPantry[cat] || [])];
   if (!existing.includes(item)) {
     state.customPantry[cat] = [...(state.customPantry[cat] || []), item];
   }
-  state.pantry[item] = true;
+  state.pantry[item] = stocked;
   save();
+  closeModal();
   renderPantry();
+  toast(`✓ Added ${item}`);
   cloudWrite(async () => {
-    await sb.from('pantry').upsert({ item, category: cat, is_stocked: true });
+    await sb.from('pantry').upsert({ item, category: cat, is_stocked: stocked });
   }, 'addPantryItem');
 }
 
