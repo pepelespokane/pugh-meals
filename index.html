@@ -546,10 +546,17 @@ function daysSince(dateStr) {
 
 function escapeQ(s) { return (s || '').replace(/'/g, "\\'"); }
 
+// Local-timezone YYYY-MM-DD. Using toISOString() returns UTC, which rolls
+// over to "tomorrow" once it's late evening Pacific time.
+function todayLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function hadTonight(mealName) {
   const meal = state.meals.find(m => m.n === mealName);
   if (!meal) return;
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayLocal();
   meal.l = today;
   state.history.unshift({date: today, meal: mealName});
   state.history = state.history.slice(0, 180);
@@ -923,7 +930,7 @@ function recalculateLastMade(mealName) {
 function addPastMeal() {
   const content = document.getElementById('modal-content');
   const sortedMeals = [...state.meals].sort((a, b) => a.n.localeCompare(b.n));
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayLocal();
   content.innerHTML = `
     <h3>Log a Past Meal</h3>
     <label>Meal</label>
