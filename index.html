@@ -90,13 +90,34 @@
   .week-day {
     background: #fff; border: 1px solid #e1e6ed; border-radius: 8px;
     padding: 10px 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px;
+    cursor: pointer; transition: background 0.1s, border-color 0.1s;
   }
+  .week-day:hover { background: #f4f7fb; border-color: #c8d2e0; }
   .week-day strong { min-width: 40px; color: #1a3a5c; }
   .week-day .slot {
     flex: 1; color: #6a7890; font-size: 14px;
   }
   .week-day .slot.filled { color: #1a2340; font-weight: 500; }
   .week-day button { padding: 6px 10px; font-size: 12px; }
+  .picker-list { max-height: 50vh; overflow-y: auto; margin-top: 12px; border: 1px solid #e1e6ed; border-radius: 8px; }
+  .picker-item { padding: 10px 12px; border-bottom: 1px solid #e5ebf3; cursor: pointer; transition: background 0.1s; }
+  .picker-item:last-child { border-bottom: none; }
+  .picker-item:hover { background: #f0f4fa; }
+  .picker-item-title { font-weight: 600; color: #1a2340; margin-bottom: 4px; }
+  .picker-item-meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; color: #6a7890; }
+  .picker-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  .picker-controls input, .picker-controls select { flex: 1; min-width: 120px; }
+  .day-picker-grid { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 8px; }
+  .day-picker-btn {
+    text-align: left; padding: 10px 12px; background: #f4f7fb;
+    border: 1px solid #d5dde8; border-radius: 8px; cursor: pointer;
+    display: flex; align-items: center; gap: 12px; font-size: 14px;
+    color: inherit; font-family: inherit;
+  }
+  .day-picker-btn:hover { background: #e3ecf6; }
+  .day-picker-btn strong { color: #1a3a5c; min-width: 40px; }
+  .day-picker-btn span { color: #6a7890; }
+  .day-picker-btn.has-meal span { color: #1a2340; font-weight: 500; }
   .pantry-item {
     background: #fff; border: 1px solid #e1e6ed; border-radius: 6px;
     padding: 10px 12px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;
@@ -581,26 +602,110 @@ function renderWeek() {
   el.innerHTML = DAYS.map(d => {
     const meal = state.week[d];
     return `
-      <div class="week-day">
+      <div class="week-day" onclick="openMealPickerForDay('${d}')" title="Click to ${meal ? 'change' : 'add'} meal">
         <strong>${d}</strong>
         <span class="slot ${meal ? 'filled' : ''}">${meal || '— empty —'}</span>
-        ${meal ? `<button class="secondary" onclick="removeFromWeek('${d}')">×</button>` : ''}
+        ${meal ? `<button class="secondary" onclick="event.stopPropagation(); removeFromWeek('${d}')">×</button>` : ''}
       </div>`;
   }).join('');
 }
 
-function addToWeek(mealName) {
-  const day = prompt("Which day? (Mon, Tue, Wed, Thu, Fri, Sat, Sun)");
-  if (!day) return;
-  const d = day.slice(0,1).toUpperCase() + day.slice(1,3).toLowerCase();
-  if (!DAYS.includes(d)) { toast("Day not recognized"); return; }
-  state.week[d] = mealName;
+function assignMealToDay(mealName, day) {
+  state.week[day] = mealName;
   save();
+  closeModal();
   renderAll();
-  toast(`${mealName} → ${d}`);
+  toast(`${mealName} → ${day}`);
   cloudWrite(async () => {
-    await sb.from('weekly_plan').upsert({ day: d, meal_name: mealName, updated_at: new Date().toISOString() });
-  }, 'addToWeek');
+    await sb.from('weekly_plan').upsert({ day, meal_name: mealName, updated_at: new Date().toISOString() });
+  }, 'assignMealToDay');
+}
+
+// Open from Week tab: pick a meal for a known day
+function openMealPickerForDay(day) {
+  const content = document.getElementById('modal-content');
+  const currentMeal = state.week[day];
+  content.innerHTML = `
+    <h3>${currentMeal ? 'Change' : 'Add'} meal for ${day}${currentMeal ? ` <span style="font-size: 13px; font-weight: normal; color: #6a7890;">(currently ${currentMeal})</span>` : ''}</h3>
+    <div class="picker-controls">
+      <input id="picker-search" placeholder="Search meals…" autofocus oninput="renderPickerList('${day}')">
+      <select id="picker-time" onchange="renderPickerList('${day}')">
+        <option value="">Any cook time</option>
+        <option>Quick</option>
+        <option>Medium</option>
+        <option>Long</option>
+      </select>
+    </div>
+    <label style="display: block; margin-top: 8px; font-size: 13px;">
+      <input type="checkbox" id="picker-kids" onchange="renderPickerList('${day}')"> Kid approved only
+    </label>
+    <div id="picker-list" class="picker-list"></div>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancel</button>
+    </div>`;
+  document.getElementById('modal').classList.add('active');
+  renderPickerList(day);
+}
+
+function renderPickerList(day) {
+  const search = (document.getElementById('picker-search').value || '').toLowerCase();
+  const timeF = document.getElementById('picker-time').value;
+  const kidsOnly = document.getElementById('picker-kids').checked;
+  const filtered = state.meals.filter(m => {
+    if (timeF && m.t !== timeF) return false;
+    if (kidsOnly && !m.k) return false;
+    if (search) {
+      const hay = (m.n + ' ' + m.i + ' ' + m.c).toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+  filtered.sort((a, b) => daysSince(b.l) - daysSince(a.l));
+  const list = document.getElementById('picker-list');
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="empty-state" style="padding: 20px;">No meals match</div>';
+    return;
+  }
+  list.innerHTML = filtered.map(m => {
+    const daysAgo = daysSince(m.l);
+    const dayTag = m.l ?
+      (daysAgo < 14 ? `<span class="recent">${daysAgo}d ago</span>` :
+       daysAgo > 60 ? `<span class="fresh">${daysAgo}d ago</span>` :
+       `<span>${daysAgo}d ago</span>`) :
+      '<span class="fresh">Never made</span>';
+    return `
+      <div class="picker-item" onclick="assignMealToDay('${escapeQ(m.n)}', '${day}')">
+        <div class="picker-item-title">${m.n}</div>
+        <div class="picker-item-meta">
+          <span>${m.p}</span>
+          <span>${m.t}</span>
+          <span>${m.c}</span>
+          ${m.k ? '<span class="fresh">Kid approved</span>' : ''}
+          ${dayTag}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// Open from Library tab: pick a day for a known meal (replaces the old prompt() flow)
+function addToWeek(mealName) {
+  const content = document.getElementById('modal-content');
+  content.innerHTML = `
+    <h3>Add "${mealName}" to which day?</h3>
+    <div class="day-picker-grid">
+      ${DAYS.map(d => {
+        const cur = state.week[d];
+        return `
+          <button class="day-picker-btn ${cur ? 'has-meal' : ''}" onclick="assignMealToDay('${escapeQ(mealName)}', '${d}')">
+            <strong>${d}</strong>
+            <span>${cur ? cur : '— empty —'}</span>
+          </button>`;
+      }).join('')}
+    </div>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancel</button>
+    </div>`;
+  document.getElementById('modal').classList.add('active');
 }
 
 function removeFromWeek(day) {
