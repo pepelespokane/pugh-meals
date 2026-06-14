@@ -99,6 +99,8 @@
   }
   .week-day .slot.filled { color: #1a2340; font-weight: 500; }
   .week-day button { padding: 6px 10px; font-size: 12px; }
+  .week-day button.log-btn { color: #2d6a3f; font-weight: 700; }
+  .week-day button.log-btn:hover { background: #e2f0d9; border-color: #c5e4c9; }
   .picker-list { max-height: 50vh; overflow-y: auto; margin-top: 12px; border: 1px solid #e1e6ed; border-radius: 8px; }
   .picker-item { padding: 10px 12px; border-bottom: 1px solid #e5ebf3; cursor: pointer; transition: background 0.1s; }
   .picker-item:last-child { border-bottom: none; }
@@ -605,7 +607,8 @@ function renderWeek() {
       <div class="week-day" onclick="openMealPickerForDay('${d}')" title="Click to ${meal ? 'change' : 'add'} meal">
         <strong>${d}</strong>
         <span class="slot ${meal ? 'filled' : ''}">${meal || '— empty —'}</span>
-        ${meal ? `<button class="secondary" onclick="event.stopPropagation(); removeFromWeek('${d}')">×</button>` : ''}
+        ${meal ? `<button class="secondary log-btn" title="Log to history" onclick="event.stopPropagation(); openLogWeekMeal('${d}')">✓</button>` : ''}
+        ${meal ? `<button class="secondary" title="Remove from week" onclick="event.stopPropagation(); removeFromWeek('${d}')">×</button>` : ''}
       </div>`;
   }).join('');
 }
@@ -715,6 +718,68 @@ function removeFromWeek(day) {
   cloudWrite(async () => {
     await sb.from('weekly_plan').delete().eq('day', day);
   }, 'removeFromWeek');
+}
+
+// Calendar date (local YYYY-MM-DD) for a weekday in the CURRENT week.
+// DAYS is Mon-first; JS getDay() is Sun=0..Sat=6.
+function dateForWeekday(day) {
+  const idx = DAYS.indexOf(day);
+  if (idx < 0) return todayLocal();
+  const now = new Date();
+  const dow = now.getDay();
+  const mondayOffset = (dow === 0 ? -6 : 1 - dow); // back up to this week's Monday
+  const target = new Date(now);
+  target.setDate(now.getDate() + mondayOffset + idx);
+  return `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(target.getDate()).padStart(2, '0')}`;
+}
+
+// Log a planned week meal to history, with an adjustable date.
+function openLogWeekMeal(day) {
+  const mealName = state.week[day];
+  if (!mealName) return;
+  const today = todayLocal();
+  let def = dateForWeekday(day);
+  if (def > today) def = today; // never default to a future date
+  const content = document.getElementById('modal-content');
+  content.innerHTML = `
+    <h3>Log to history</h3>
+    <p style="color: #6a7890; font-size: 13px; margin: 0 0 12px;">Mark <strong>${mealName}</strong> (${day}) as eaten.</p>
+    <label>Date eaten</label>
+    <input type="date" id="logweek-date" value="${def}" max="${today}">
+    <label style="font-weight: normal; font-size: 13px;">
+      <input type="checkbox" id="logweek-clear"> Also clear ${day} from this week
+    </label>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancel</button>
+      <button class="primary" onclick="confirmLogWeekMeal('${day}')">Log it</button>
+    </div>`;
+  document.getElementById('modal').classList.add('active');
+}
+
+function confirmLogWeekMeal(day) {
+  const mealName = state.week[day];
+  const date = document.getElementById('logweek-date').value;
+  if (!mealName || !date) { toast("Pick a date"); return; }
+  const alsoClear = document.getElementById('logweek-clear').checked;
+  state.history.unshift({ date, meal: mealName });
+  state.history.sort((a, b) => b.date.localeCompare(a.date));
+  state.history = state.history.slice(0, 180);
+  recalculateLastMade(mealName);
+  if (alsoClear) delete state.week[day];
+  save();
+  closeModal();
+  renderAll();
+  toast(`✓ Logged ${mealName}`);
+  cloudWrite(async () => {
+    await sb.from('dinner_history').insert({ meal_name: mealName, date });
+    const mealObj = state.meals.find(m => m.n === mealName);
+    if (mealObj) {
+      await sb.from('meals').update({ last_made: mealObj.l || null }).eq('name', mealName);
+    }
+    if (alsoClear) {
+      await sb.from('weekly_plan').delete().eq('day', day);
+    }
+  }, 'logWeekMeal');
 }
 
 function clearWeek() {
