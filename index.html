@@ -261,6 +261,8 @@
   <section id="week">
     <h2>This Week</h2>
     <div id="week-days"></div>
+    <button class="big-btn muted" onclick="suggestMeals()">💡 Suggest Meals</button>
+    <div id="week-suggestions"></div>
     <button class="big-btn muted" onclick="clearWeek()">Clear Week</button>
     <button class="big-btn" onclick="generateShoppingList()">📝 Generate Shopping List</button>
   </section>
@@ -811,6 +813,67 @@ ${pantryItems.length ? pantryItems.map(x => `- ${x}`).join('\n') : '(nothing che
 Generate a consolidated shopping list organized by grocery store section (Produce, Meat, Dairy, Pantry, Freezer). Skip anything I already have. Estimate quantities for a family of 4 (2 adults, kids ages 5 and 3).`;
 
   openClaudeWithPrompt(prompt, "Shopping list");
+}
+
+// ==================== WEEK SUGGESTIONS ====================
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// "Bring back" = made 14-30 days ago (in the last month, but not the last 2 weeks).
+// "Fresh"      = not made in over a month (includes never-made).
+function suggestMeals() {
+  const inWeek = new Set(Object.values(state.week));
+  const comebackPool = state.meals.filter(m => {
+    if (inWeek.has(m.n) || !m.l) return false;
+    const d = daysSince(m.l);
+    return d >= 14 && d <= 30;
+  });
+  const freshPool = state.meals.filter(m => {
+    if (inWeek.has(m.n)) return false;
+    return daysSince(m.l) > 30; // 9999 if never made
+  });
+  renderSuggestions(shuffle(comebackPool).slice(0, 3), shuffle(freshPool).slice(0, 3));
+}
+
+function suggestionCard(m) {
+  const tag = m.l ? `${daysSince(m.l)}d ago` : 'Never made';
+  return `
+    <div class="meal-card" style="margin-bottom: 8px;">
+      <div class="meal-title">${m.n}</div>
+      <div class="meal-meta">
+        <span>${m.p}</span><span>${m.t}</span><span>${m.c}</span>
+        ${m.k ? '<span class="fresh">Kid approved</span>' : ''}
+        <span>${tag}</span>
+      </div>
+      <div class="meal-ingredients">${m.i}</div>
+      <div class="meal-actions">
+        <button class="primary" onclick="addToWeek('${escapeQ(m.n)}')">Add to Week</button>
+        <button class="secondary" onclick="openRecipeModal('${escapeQ(m.n)}')">Recipe</button>
+      </div>
+    </div>`;
+}
+
+function renderSuggestions(comeback, fresh) {
+  const el = document.getElementById('week-suggestions');
+  if (!el) return;
+  if (comeback.length === 0 && fresh.length === 0) {
+    el.innerHTML = '<div class="empty-state" style="padding: 20px;">No suggestions yet — log a few dinners and check back.</div>';
+    return;
+  }
+  const none = '<div style="color: #6a7890; font-size: 13px; padding: 4px 0 8px;">Nothing fits right now.</div>';
+  el.innerHTML =
+    '<h3 style="font-size: 14px; color: #1a3a5c; margin: 14px 0 8px;">🔁 Bring back — had this month, not in 2 weeks</h3>' +
+    (comeback.length ? comeback.map(suggestionCard).join('') : none) +
+    '<h3 style="font-size: 14px; color: #1a3a5c; margin: 14px 0 8px;">🆕 Something fresh — not in over a month</h3>' +
+    (fresh.length ? fresh.map(suggestionCard).join('') : none) +
+    '<button class="big-btn muted" style="margin-top: 4px;" onclick="suggestMeals()">🔄 Reshuffle suggestions</button>';
 }
 
 // ==================== PANTRY ====================
