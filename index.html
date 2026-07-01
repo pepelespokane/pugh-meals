@@ -101,6 +101,9 @@
   .week-day button { padding: 6px 10px; font-size: 12px; }
   .week-day button.log-btn { color: #2d6a3f; font-weight: 700; }
   .week-day button.log-btn:hover { background: #e2f0d9; border-color: #c5e4c9; }
+  /* Stays green once this meal has been logged to history this week */
+  .week-day button.log-btn.logged { background: #2d8a4e; border-color: #2d8a4e; color: #fff; }
+  .week-day button.log-btn.logged:hover { background: #26743f; border-color: #26743f; }
   .picker-list { max-height: 50vh; overflow-y: auto; margin-top: 12px; border: 1px solid #e1e6ed; border-radius: 8px; }
   .picker-item { padding: 10px 12px; border-bottom: 1px solid #e5ebf3; cursor: pointer; transition: background 0.1s; }
   .picker-item:last-child { border-bottom: none; }
@@ -601,15 +604,26 @@ function hadTonight(mealName) {
 
 // ==================== WEEK ====================
 
+// Has this meal already been logged to history within the CURRENT week (Mon–Sun)?
+// Derived from history so it syncs across devices + survives reload, and auto-clears
+// when the day's meal is changed or removed (the meal no longer matches).
+function isMealLoggedThisWeek(mealName) {
+  if (!mealName) return false;
+  const monday = dateForWeekday('Mon');
+  const sunday = dateForWeekday('Sun');
+  return state.history.some(h => h.meal === mealName && h.date >= monday && h.date <= sunday);
+}
+
 function renderWeek() {
   const el = document.getElementById('week-days');
   el.innerHTML = DAYS.map(d => {
     const meal = state.week[d];
+    const logged = meal && isMealLoggedThisWeek(meal);
     return `
       <div class="week-day" onclick="openMealPickerForDay('${d}')" title="Click to ${meal ? 'change' : 'add'} meal">
         <strong>${d}</strong>
         <span class="slot ${meal ? 'filled' : ''}">${meal || '— empty —'}</span>
-        ${meal ? `<button class="secondary log-btn" title="Log to history" onclick="event.stopPropagation(); openLogWeekMeal('${d}')">✓</button>` : ''}
+        ${meal ? `<button class="secondary log-btn ${logged ? 'logged' : ''}" title="${logged ? 'Logged to history ✓' : 'Log to history'}" onclick="event.stopPropagation(); openLogWeekMeal('${d}')">✓</button>` : ''}
         ${meal ? `<button class="secondary" title="Remove from week" onclick="event.stopPropagation(); removeFromWeek('${d}')">×</button>` : ''}
       </div>`;
   }).join('');
