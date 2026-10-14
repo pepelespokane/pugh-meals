@@ -154,6 +154,17 @@
   .shopping-item .name { flex: 1; }
   .shopping-item.saved { background: #fafbfc; opacity: 0.85; }
   .shopping-item.saved .name { color: #6a7890; font-style: italic; }
+  .store-filter { display: flex; gap: 6px; margin: 0 0 10px; }
+  .store-filter button {
+    flex: 1; padding: 8px; border: 1px solid #cfd7e2; background: #fff;
+    border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; color: #6a7890;
+  }
+  .store-filter button.active { background: #1a3a5c; color: #fff; border-color: #1a3a5c; }
+  .store-group { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: #6a7890; margin: 12px 0 6px; display: flex; justify-content: space-between; }
+  .shopping-item button.store-pill { min-width: 74px; font-weight: 700; font-size: 12px; border-radius: 999px; }
+  .shopping-item button.store-pill.winco { background: #e6f4ea; color: #1e6b34; border-color: #9fd3ae; }
+  .shopping-item button.store-pill.costco { background: #fdecea; color: #a52a1f; border-color: #f1aaa3; }
   .shopping-item button {
     padding: 6px 10px; font-size: 13px;
     border: 1px solid #cfd7e2; background: #fff; border-radius: 5px; cursor: pointer;
@@ -293,6 +304,7 @@
       </div>
     </div>
     <h3 style="font-size: 14px; color: #1a3a5c; margin: 16px 0 8px;">Active List</h3>
+    <div class="store-filter" id="store-filter"></div>
     <div id="shopping-active"></div>
     <h3 style="font-size: 14px; color: #1a3a5c; margin: 16px 0 8px;">Saved for Later</h3>
     <div id="shopping-saved"></div>
@@ -483,6 +495,8 @@ function load() {
   if (!state.pantry) state.pantry = {};
   if (!state.customPantry) state.customPantry = {};
   if (!state.shoppingList) state.shoppingList = [];
+  if (!state.storeMemory) state.storeMemory = {};   // item (lowercase) -> 'WinCo' | 'Costco'
+  if (!state.storeFilter) state.storeFilter = 'All';
   if (!state.pantryFilter) state.pantryFilter = 'all';
 }
 
@@ -1097,7 +1111,8 @@ function addPantryToShopping(item) {
     toast(`Already on shopping list`);
     return;
   }
-  state.shoppingList.unshift({ item, saved: false });
+  const store = defaultStore(item);
+  state.shoppingList.unshift({ item, saved: false, store });
   save();
   renderPantry();
   renderShopping();
@@ -1105,6 +1120,7 @@ function addPantryToShopping(item) {
   cloudWrite(async () => {
     await sb.from('shopping_list').insert({ item, saved_for_later: false });
   }, 'addPantryToShopping');
+  cloudSetStore(item, store);
 }
 
 // ==================== HISTORY ====================
@@ -1216,33 +1232,104 @@ function savePastMeal() {
 
 // ==================== SHOPPING LIST ====================
 
+const STORES = ['WinCo', 'Costco'];
+
+// Which store an item belongs to: what it was last set to, else a guess, else WinCo.
+function defaultStore(item) {
+  const key = (item || '').toLowerCase();
+  if (state.storeMemory && state.storeMemory[key]) return state.storeMemory[key];
+  if (key.includes('costco')) return 'Costco';
+  return 'WinCo';
+}
+function storeOf(s) { return s.store || defaultStore(s.item); }
+
+function shoppingRow(s, saved) {
+  const st = storeOf(s);
+  const other = st === 'Costco' ? 'WinCo' : 'Costco';
+  const pill = `<button class="store-pill ${st.toLowerCase()}" title="Tap to move to ${other}"
+      onclick="toggleStore('${escapeQ(s.item)}')">${st}</button>`;
+  if (saved) return `
+      <div class="shopping-item saved">
+        <span class="name">${s.item}</span>
+        ${pill}
+        <button title="Move to active list" onclick="moveShopping('${escapeQ(s.item)}', false)">⬆</button>
+        <button title="Remove" onclick="removeShopping('${escapeQ(s.item)}')">✕</button>
+      </div>`;
+  return `
+      <div class="shopping-item">
+        <span class="name">${s.item}</span>
+        ${pill}
+        <button title="Save for later" onclick="moveShopping('${escapeQ(s.item)}', true)">💾</button>
+        <button title="Remove" onclick="removeShopping('${escapeQ(s.item)}')">✕</button>
+      </div>`;
+}
+
+function setStoreFilter(f) {
+  state.storeFilter = f;
+  save();
+  renderShopping();
+}
+
 function renderShopping() {
   const active = state.shoppingList.filter(s => !s.saved);
   const saved = state.shoppingList.filter(s => s.saved);
   const activeEl = document.getElementById('shopping-active');
   const savedEl = document.getElementById('shopping-saved');
+  const filterEl = document.getElementById('store-filter');
   if (!activeEl || !savedEl) return;
+
+  const filter = state.storeFilter || 'All';
+  const count = st => active.filter(s => storeOf(s) === st).length;
+  if (filterEl) {
+    filterEl.innerHTML = ['All', ...STORES].map(f => {
+      const n = f === 'All' ? active.length : count(f);
+      return `<button class="${f === filter ? 'active' : ''}" onclick="setStoreFilter('${f}')">${f} (${n})</button>`;
+    }).join('');
+  }
 
   if (active.length === 0) {
     activeEl.innerHTML = '<div class="empty-state" style="padding: 20px;">Nothing to buy. Add items from Pantry tab or manually above.</div>';
+  } else if (filter === 'All') {
+    activeEl.innerHTML = STORES.map(st => {
+      const rows = active.filter(s => storeOf(s) === st);
+      if (rows.length === 0) return '';
+      return `<div class="store-group"><span>${st}</span><span>${rows.length}</span></div>` +
+        rows.map(s => shoppingRow(s, false)).join('');
+    }).join('');
   } else {
-    activeEl.innerHTML = active.map(s => `
-      <div class="shopping-item">
-        <span class="name">${s.item}</span>
-        <button title="Save for later" onclick="moveShopping('${escapeQ(s.item)}', true)">💾</button>
-        <button title="Remove" onclick="removeShopping('${escapeQ(s.item)}')">✕</button>
-      </div>`).join('');
+    const rows = active.filter(s => storeOf(s) === filter);
+    activeEl.innerHTML = rows.length
+      ? rows.map(s => shoppingRow(s, false)).join('')
+      : `<div class="empty-state" style="padding: 20px;">Nothing on the ${filter} list.</div>`;
   }
+
   if (saved.length === 0) {
     savedEl.innerHTML = '<div style="color: #6a7890; font-size: 13px; padding: 8px;">Nothing saved for later.</div>';
   } else {
-    savedEl.innerHTML = saved.map(s => `
-      <div class="shopping-item saved">
-        <span class="name">${s.item}</span>
-        <button title="Move to active list" onclick="moveShopping('${escapeQ(s.item)}', false)">⬆</button>
-        <button title="Remove" onclick="removeShopping('${escapeQ(s.item)}')">✕</button>
-      </div>`).join('');
+    savedEl.innerHTML = saved.map(s => shoppingRow(s, true)).join('');
   }
+}
+
+function toggleStore(itemName) {
+  const entry = state.shoppingList.find(s => s.item === itemName);
+  if (!entry) return;
+  entry.store = storeOf(entry) === 'Costco' ? 'WinCo' : 'Costco';
+  state.storeMemory[itemName.toLowerCase()] = entry.store;   // remembered for next time
+  save();
+  renderShopping();
+  toast(`${itemName} → ${entry.store}`);
+  cloudWrite(async () => {
+    const { error } = await sb.from('shopping_list').update({ store: entry.store }).eq('item', itemName);
+    if (error) throw error;
+  }, 'toggleStore');
+}
+
+// Store is written separately so an older database without the column still syncs the item.
+function cloudSetStore(item, store) {
+  cloudWrite(async () => {
+    const { error } = await sb.from('shopping_list').update({ store }).eq('item', item);
+    if (error) throw error;
+  }, 'setStore');
 }
 
 function addShoppingManual() {
@@ -1250,7 +1337,8 @@ function addShoppingManual() {
   const item = (input.value || '').trim();
   if (!item) return;
   if (isOnShoppingList(item)) { toast("Already on list"); return; }
-  state.shoppingList.unshift({ item, saved: false });
+  const store = defaultStore(item);
+  state.shoppingList.unshift({ item, saved: false, store });
   input.value = '';
   save();
   renderShopping();
@@ -1259,6 +1347,7 @@ function addShoppingManual() {
   cloudWrite(async () => {
     await sb.from('shopping_list').insert({ item, saved_for_later: false });
   }, 'addShoppingManual');
+  cloudSetStore(item, store);
 }
 
 function removeShopping(itemName) {
@@ -1732,8 +1821,9 @@ function pullCloudIntoState(meals, history, week, pantry, shopping) {
     }
   });
   state.shoppingList = (shopping || []).map(s => ({
-    item: s.item, saved: !!s.saved_for_later
+    item: s.item, saved: !!s.saved_for_later, store: s.store || undefined
   }));
+  state.shoppingList.forEach(s => { if (s.store) state.storeMemory[s.item.toLowerCase()] = s.store; });
 }
 
 async function migrateLocalToCloud() {
@@ -1822,7 +1912,8 @@ async function refetchTable(tableName) {
     } else if (tableName === 'shopping_list') {
       const { data } = await sb.from('shopping_list').select('*').order('added_at', { ascending: false });
       if (data) {
-        state.shoppingList = data.map(s => ({ item: s.item, saved: !!s.saved_for_later }));
+        state.shoppingList = data.map(s => ({ item: s.item, saved: !!s.saved_for_later, store: s.store || undefined }));
+        state.shoppingList.forEach(s => { if (s.store) state.storeMemory[s.item.toLowerCase()] = s.store; });
       }
     }
     save();
