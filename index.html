@@ -151,7 +151,12 @@
     background: #fff; border: 1px solid #e1e6ed; border-radius: 6px;
     padding: 10px 12px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;
   }
-  .shopping-item .name { flex: 1; }
+  .shopping-item .name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .shopping-item .qty { display: flex; align-items: center; border: 1px solid #cfd7e2; border-radius: 5px; flex-shrink: 0; }
+  .shopping-item .qty button { border: 0; padding: 6px 9px; background: transparent; font-size: 15px; font-weight: 700; color: #1a3a5c; }
+  .shopping-item .qty button:disabled { color: #c3ccd8; cursor: default; }
+  .shopping-item .qty b { min-width: 18px; text-align: center; font-size: 14px; color: #1a3a5c; }
+  .shopping-item .qty-tag { font-weight: 700; color: #1a3a5c; font-style: normal; }
   .shopping-item.saved { background: #fafbfc; opacity: 0.85; }
   .shopping-item.saved .name { color: #6a7890; font-style: italic; }
   .store-filter { display: flex; gap: 6px; margin: 0 0 10px; }
@@ -162,11 +167,11 @@
   .store-filter button.active { background: #1a3a5c; color: #fff; border-color: #1a3a5c; }
   .store-group { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
     color: #6a7890; margin: 12px 0 6px; display: flex; justify-content: space-between; }
-  .shopping-item button.store-pill { min-width: 74px; font-weight: 700; font-size: 12px; border-radius: 999px; }
+  .shopping-item button.store-pill { min-width: 64px; font-weight: 700; font-size: 12px; border-radius: 999px; }
   .shopping-item button.store-pill.winco { background: #e6f4ea; color: #1e6b34; border-color: #9fd3ae; }
   .shopping-item button.store-pill.costco { background: #fdecea; color: #a52a1f; border-color: #f1aaa3; }
   .shopping-item button {
-    padding: 6px 10px; font-size: 13px;
+    padding: 6px 8px; font-size: 13px;
     border: 1px solid #cfd7e2; background: #fff; border-radius: 5px; cursor: pointer;
   }
   .recipe-view {
@@ -298,7 +303,7 @@
     <div class="ideas-form" style="padding: 10px 12px;">
       <label>Add item manually</label>
       <div style="display: flex; gap: 6px;">
-        <input type="text" id="shopping-new" placeholder="e.g. Black beans, 2 cans"
+        <input type="text" id="shopping-new" placeholder="e.g. 2 cucumbers"
           onkeydown="if(event.key==='Enter')addShoppingManual()" style="margin: 0;">
         <button class="primary" onclick="addShoppingManual()">Add</button>
       </div>
@@ -1243,14 +1248,22 @@ function defaultStore(item) {
 }
 function storeOf(s) { return s.store || defaultStore(s.item); }
 
+function qtyOf(s) { return s.qty > 1 ? s.qty : 1; }
+
 function shoppingRow(s, saved) {
   const st = storeOf(s);
+  const q = qtyOf(s);
+  const stepper = `<span class="qty">
+        <button title="One less" ${q <= 1 ? 'disabled' : ''} onclick="changeQty('${escapeQ(s.item)}', -1)">−</button>
+        <b>${q}</b>
+        <button title="One more" onclick="changeQty('${escapeQ(s.item)}', 1)">+</button>
+      </span>`;
   const other = st === 'Costco' ? 'WinCo' : 'Costco';
   const pill = `<button class="store-pill ${st.toLowerCase()}" title="Tap to move to ${other}"
       onclick="toggleStore('${escapeQ(s.item)}')">${st}</button>`;
   if (saved) return `
       <div class="shopping-item saved">
-        <span class="name">${s.item}</span>
+        <span class="name">${q > 1 ? `<span class="qty-tag">${q}× </span>` : ''}${s.item}</span>
         ${pill}
         <button title="Move to active list" onclick="moveShopping('${escapeQ(s.item)}', false)">⬆</button>
         <button title="Remove" onclick="removeShopping('${escapeQ(s.item)}')">✕</button>
@@ -1258,6 +1271,7 @@ function shoppingRow(s, saved) {
   return `
       <div class="shopping-item">
         <span class="name">${s.item}</span>
+        ${stepper}
         ${pill}
         <button title="Save for later" onclick="moveShopping('${escapeQ(s.item)}', true)">💾</button>
         <button title="Remove" onclick="removeShopping('${escapeQ(s.item)}')">✕</button>
@@ -1324,6 +1338,31 @@ function toggleStore(itemName) {
   }, 'toggleStore');
 }
 
+function changeQty(itemName, delta) {
+  const entry = state.shoppingList.find(s => s.item === itemName);
+  if (!entry) return;
+  const qty = Math.max(1, Math.min(99, qtyOf(entry) + delta));
+  if (qty === qtyOf(entry)) return;
+  entry.qty = qty;
+  save();
+  renderShopping();
+  cloudSetQty(itemName, qty);
+}
+
+function cloudSetQty(item, qty) {
+  cloudWrite(async () => {
+    const { error } = await sb.from('shopping_list').update({ qty }).eq('item', item);
+    if (error) throw error;
+  }, 'setQty');
+}
+
+// "2 cucumbers" or "2x cucumbers" -> { qty: 2, item: 'cucumbers' }. Anything else is qty 1.
+function parseQtyInput(text) {
+  const m = text.match(/^(\d{1,2})\s*[x×]?\s+(.+)$/i);
+  if (m && +m[1] >= 1) return { qty: +m[1], item: m[2].trim() };
+  return { qty: 1, item: text };
+}
+
 // Store is written separately so an older database without the column still syncs the item.
 function cloudSetStore(item, store) {
   cloudWrite(async () => {
@@ -1334,20 +1373,28 @@ function cloudSetStore(item, store) {
 
 function addShoppingManual() {
   const input = document.getElementById('shopping-new');
-  const item = (input.value || '').trim();
-  if (!item) return;
-  if (isOnShoppingList(item)) { toast("Already on list"); return; }
+  const raw = (input.value || '').trim();
+  if (!raw) return;
+  const { qty, item } = parseQtyInput(raw);
+  const existing = state.shoppingList.find(s => s.item.toLowerCase() === item.toLowerCase());
+  if (existing) {   // adding it again bumps the count instead of refusing
+    input.value = '';
+    changeQty(existing.item, qty);
+    toast(`${existing.item}: now ${qtyOf(existing)}`);
+    return;
+  }
   const store = defaultStore(item);
-  state.shoppingList.unshift({ item, saved: false, store });
+  state.shoppingList.unshift({ item, saved: false, store, qty });
   input.value = '';
   save();
   renderShopping();
   renderPantry();
-  toast(`🛒 Added ${item}`);
+  toast(`🛒 Added ${qty > 1 ? qty + ' ' : ''}${item}`);
   cloudWrite(async () => {
     await sb.from('shopping_list').insert({ item, saved_for_later: false });
   }, 'addShoppingManual');
   cloudSetStore(item, store);
+  if (qty > 1) cloudSetQty(item, qty);
 }
 
 function removeShopping(itemName) {
@@ -1821,7 +1868,7 @@ function pullCloudIntoState(meals, history, week, pantry, shopping) {
     }
   });
   state.shoppingList = (shopping || []).map(s => ({
-    item: s.item, saved: !!s.saved_for_later, store: s.store || undefined
+    item: s.item, saved: !!s.saved_for_later, store: s.store || undefined, qty: s.qty || 1
   }));
   state.shoppingList.forEach(s => { if (s.store) state.storeMemory[s.item.toLowerCase()] = s.store; });
 }
@@ -1912,7 +1959,7 @@ async function refetchTable(tableName) {
     } else if (tableName === 'shopping_list') {
       const { data } = await sb.from('shopping_list').select('*').order('added_at', { ascending: false });
       if (data) {
-        state.shoppingList = data.map(s => ({ item: s.item, saved: !!s.saved_for_later, store: s.store || undefined }));
+        state.shoppingList = data.map(s => ({ item: s.item, saved: !!s.saved_for_later, store: s.store || undefined, qty: s.qty || 1 }));
         state.shoppingList.forEach(s => { if (s.store) state.storeMemory[s.item.toLowerCase()] = s.store; });
       }
     }

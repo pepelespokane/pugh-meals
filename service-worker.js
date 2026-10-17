@@ -2,7 +2,7 @@
 // Ensures each app launch tries to fetch the latest version from the server.
 // Falls back to cache only if offline.
 
-const CACHE_NAME = 'pugh-meals-v7';
+const CACHE_NAME = 'pugh-meals-v8';
 const APP_SHELL = [
   './',
   './index.html',
