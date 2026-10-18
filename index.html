@@ -156,6 +156,13 @@
   .shopping-item .qty button { border: 0; padding: 6px 9px; background: transparent; font-size: 15px; font-weight: 700; color: #1a3a5c; }
   .shopping-item .qty button:disabled { color: #c3ccd8; cursor: default; }
   .shopping-item .qty b { min-width: 18px; text-align: center; font-size: 14px; color: #1a3a5c; }
+  .section-head { font-size: 12px; font-weight: 700; color: #1a3a5c; margin: 10px 0 4px 2px;
+    display: flex; justify-content: space-between; border-bottom: 1px solid #e1e6ed; padding-bottom: 2px; }
+  .section-head span:last-child { color: #8a97ab; font-weight: 600; }
+  .shopping-item .name { cursor: pointer; }
+  .section-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .section-pick button { padding: 10px 6px; border: 1px solid #cfd7e2; background: #fff; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  .section-pick button.current { background: #1a3a5c; color: #fff; border-color: #1a3a5c; }
   .shopping-item .qty-tag { font-weight: 700; color: #1a3a5c; font-style: normal; }
   .shopping-item.saved { background: #fafbfc; opacity: 0.85; }
   .shopping-item.saved .name { color: #6a7890; font-style: italic; }
@@ -501,6 +508,7 @@ function load() {
   if (!state.customPantry) state.customPantry = {};
   if (!state.shoppingList) state.shoppingList = [];
   if (!state.storeMemory) state.storeMemory = {};   // item (lowercase) -> 'WinCo' | 'Costco'
+  if (!state.sectionMemory) state.sectionMemory = {}; // item (lowercase) -> section name
   if (!state.storeFilter) state.storeFilter = 'All';
   if (!state.pantryFilter) state.pantryFilter = 'all';
 }
@@ -1239,6 +1247,76 @@ function savePastMeal() {
 
 const STORES = ['WinCo', 'Costco'];
 
+// ---- Sections: group like items together, in each store's walking order ----
+// Order is a typical layout for each chain, not a verified map of the North Spokane stores.
+const SECTION_ORDER = {
+  WinCo:  ['Produce', 'Bakery', 'Bulk', 'Pantry', 'Snacks', 'Drinks', 'Household', 'Frozen', 'Meat & Deli', 'Dairy & Eggs', 'Other'],
+  Costco: ['Household', 'Pantry', 'Snacks', 'Drinks', 'Bakery', 'Meat & Deli', 'Dairy & Eggs', 'Produce', 'Frozen', 'Bulk', 'Other'],
+};
+const ALL_SECTIONS = ['Produce', 'Bakery', 'Meat & Deli', 'Dairy & Eggs', 'Frozen', 'Pantry', 'Snacks', 'Drinks', 'Bulk', 'Household', 'Other'];
+// First match wins, so the order matters ("apple juice" is Drinks, "tortilla chips" is Snacks,
+// "peanut butter" is Pantry). Each keyword matches at the start of a word; a trailing $ means whole word.
+const SECTION_RULES = [
+  ['Frozen', ['frozen', 'ice cream', 'popsicle', 'tater tot', 'fish stick', 'hash ?browns?', 'chimichanga', 'spring roll', 'corn dog', 'nuggets?', 'eggo', 'waffles']],
+  ['Household', ['tide', 'detergent', 'laundry', 'paper towel', 'toilet paper', 'tp$', 'napkin', 'trash bag', 'garbage bag', 'foil', 'plastic wrap', 'ziploc', 'baggies', 'soap', 'dish', 'shampoo', 'conditioner', 'toothpaste', 'toothbrush', 'diaper', 'wipes', 'sponge', 'cleaner', 'bleach', 'batter(y|ies)', 'cr2032', 'tissue', 'kleenex', 'light ?bulb', 'dryer sheet']],
+  ['Drinks', ['juice', 'soda', 'water$', 'sparkling', 'la ?croix', 'coffee', 'tea$', 'teas$', 'gatorade', 'lemonade', 'kombucha', 'beer', 'wine']],
+  ['Snacks', ['chips', 'crackers?', 'granola', 'trail mix', 'rice cakes?', 'fig bars?', 'cookies?', 'pretzels?', 'popcorn', 'goldfish', 'fruit snacks?', 'cereal', 'oatmeal', 'nuts$', 'almonds', 'candy', 'chocolate', 'snack']],
+  ['Bakery', ['bread', 'buns?$', 'bagels?', 'muffins?', 'rolls$', 'tortillas?', 'croissants?', 'pita', 'naan', 'cake$', 'donuts?']],
+  ['Bulk', ['bulk']],
+  ['Pantry', ['canned', 'soups?', 'sauce', 'marinara', 'salsa', 'broth', 'stock$', 'beans', 'rice', 'pasta', 'spaghetti', 'noodles?', 'macaroni', 'mac (&|and) cheese', 'tortellini', 'quinoa', 'pilaf', 'stuffing', 'olives?$', 'olive oil', 'oil$', 'vinegar', 'soy', 'peanut butter', 'jelly', 'jam$', 'honey', 'syrup', 'flour', 'sugar', 'spices?', 'salt$', 'black pepper', 'seasoning', 'ketchup', 'mustard', 'mayo', 'ranch', 'dressing', 'diced tomatoes', 'tomato paste', 'baking', 'yeast', 'vanilla']],
+  ['Meat & Deli', ['chicken', 'beef', 'pork', 'steaks?', 'sausage', 'bacon', 'ham$', 'turkey', 'salmon', 'shrimp', 'tilapia', 'fish', 'ground', 'hot ?dogs?', 'hamburger', 'meatballs?', 'pepperoni', 'salami', 'deli', 'lunch meat', 'brats?$', 'ribs', 'roast', 'cod$', 'tuna']],
+  ['Produce', ['apples?', 'bananas?', 'berr', 'strawberr', 'blueberr', 'raspberr', 'grapes?', 'oranges?', 'mandarins?', 'clementines?', 'cuties', 'lemons?', 'limes?', 'avocados?', 'cucumbers?', 'tomato', 'lettuce', 'spinach', 'kale', 'salad', 'onions?', 'garlic', 'peppers?', 'carrots?', 'celery', 'potato', 'zucchini', 'squash', 'broccoli', 'cauliflower', 'corn$', 'mushrooms?', 'cilantro', 'parsley', 'basil', 'herbs?', 'pears?', 'peach', 'plums?', 'melon', 'watermelon', 'cantaloupe', 'pineapple', 'kiwi', 'mango', 'cabbage', 'green beans', 'asparagus', 'eggplant', 'ginger', 'jalape', 'fruit', 'veggie', 'vegetable', 'produce', 'pumpkin', 'sweet potato', 'yams?', 'radish', 'beets?', 'cherries', 'nectarines?']],
+  ['Dairy & Eggs', ['milk', 'cheese', 'yogurt', 'butter', 'sour cream', 'cream', 'eggs?$', 'half (&|and) half', 'creamer', 'parmesan', 'ricotta', 'mozzarella', 'cheddar', 'cottage', 'whipped']],
+].map(([sec, kws]) => [sec, kws.map(k => new RegExp('\\b' + (k.endsWith('$') ? '(' + k.slice(0, -1) + ')\\b' : k), 'i'))]);
+
+function guessSection(item) {
+  for (const [sec, res] of SECTION_RULES) if (res.some(re => re.test(item))) return sec;
+  return 'Other';
+}
+function sectionOf(s) {
+  return s.section || (state.sectionMemory && state.sectionMemory[s.item.toLowerCase()]) || guessSection(s.item);
+}
+
+// Rows for one store, grouped under section headers in that store's walking order.
+function sectionedRows(rows, store) {
+  const order = SECTION_ORDER[store] || ALL_SECTIONS;
+  return order.map(sec => {
+    const inSec = rows.filter(s => sectionOf(s) === sec)
+      .sort((a, b) => a.item.localeCompare(b.item));
+    if (!inSec.length) return '';
+    return `<div class="section-head"><span>${sec}</span><span>${inSec.length}</span></div>` +
+      inSec.map(s => shoppingRow(s, false)).join('');
+  }).join('');
+}
+
+function openSectionPicker(itemName) {
+  const entry = state.shoppingList.find(s => s.item === itemName);
+  if (!entry) return;
+  const cur = sectionOf(entry);
+  document.getElementById('modal-content').innerHTML = `
+    <h3>${itemName}</h3>
+    <div style="color: #6a7890; font-size: 13px; margin-bottom: 10px;">Which section? It will remember next time.</div>
+    <div class="section-pick">${ALL_SECTIONS.map(sec =>
+      `<button class="${sec === cur ? 'current' : ''}" onclick="setSection('${escapeQ(itemName)}', '${sec}')">${sec}</button>`).join('')}</div>
+    <div class="modal-actions"><button onclick="closeModal()">Cancel</button></div>`;
+  document.getElementById('modal').classList.add('active');
+}
+
+function setSection(itemName, section) {
+  const entry = state.shoppingList.find(s => s.item === itemName);
+  closeModal();
+  if (!entry) return;
+  entry.section = section;
+  state.sectionMemory[itemName.toLowerCase()] = section;
+  save();
+  renderShopping();
+  toast(`${itemName} → ${section}`);
+  cloudWrite(async () => {
+    const { error } = await sb.from('shopping_list').update({ section }).eq('item', itemName);
+    if (error) throw error;
+  }, 'setSection');
+}
+
 // Which store an item belongs to: what it was last set to, else a guess, else WinCo.
 function defaultStore(item) {
   const key = (item || '').toLowerCase();
@@ -1270,7 +1348,7 @@ function shoppingRow(s, saved) {
       </div>`;
   return `
       <div class="shopping-item">
-        <span class="name">${s.item}</span>
+        <span class="name" title="Tap to change section" onclick="openSectionPicker('${escapeQ(s.item)}')">${s.item}</span>
         ${stepper}
         ${pill}
         <button title="Save for later" onclick="moveShopping('${escapeQ(s.item)}', true)">💾</button>
@@ -1308,12 +1386,12 @@ function renderShopping() {
       const rows = active.filter(s => storeOf(s) === st);
       if (rows.length === 0) return '';
       return `<div class="store-group"><span>${st}</span><span>${rows.length}</span></div>` +
-        rows.map(s => shoppingRow(s, false)).join('');
+        sectionedRows(rows, st);
     }).join('');
   } else {
     const rows = active.filter(s => storeOf(s) === filter);
     activeEl.innerHTML = rows.length
-      ? rows.map(s => shoppingRow(s, false)).join('')
+      ? sectionedRows(rows, filter)
       : `<div class="empty-state" style="padding: 20px;">Nothing on the ${filter} list.</div>`;
   }
 
@@ -1868,9 +1946,12 @@ function pullCloudIntoState(meals, history, week, pantry, shopping) {
     }
   });
   state.shoppingList = (shopping || []).map(s => ({
-    item: s.item, saved: !!s.saved_for_later, store: s.store || undefined, qty: s.qty || 1
+    item: s.item, saved: !!s.saved_for_later, store: s.store || undefined, qty: s.qty || 1, section: s.section || undefined
   }));
-  state.shoppingList.forEach(s => { if (s.store) state.storeMemory[s.item.toLowerCase()] = s.store; });
+  state.shoppingList.forEach(s => {
+    if (s.store) state.storeMemory[s.item.toLowerCase()] = s.store;
+    if (s.section) state.sectionMemory[s.item.toLowerCase()] = s.section;
+  });
 }
 
 async function migrateLocalToCloud() {
@@ -1959,8 +2040,11 @@ async function refetchTable(tableName) {
     } else if (tableName === 'shopping_list') {
       const { data } = await sb.from('shopping_list').select('*').order('added_at', { ascending: false });
       if (data) {
-        state.shoppingList = data.map(s => ({ item: s.item, saved: !!s.saved_for_later, store: s.store || undefined, qty: s.qty || 1 }));
-        state.shoppingList.forEach(s => { if (s.store) state.storeMemory[s.item.toLowerCase()] = s.store; });
+        state.shoppingList = data.map(s => ({ item: s.item, saved: !!s.saved_for_later, store: s.store || undefined, qty: s.qty || 1, section: s.section || undefined }));
+        state.shoppingList.forEach(s => {
+          if (s.store) state.storeMemory[s.item.toLowerCase()] = s.store;
+          if (s.section) state.sectionMemory[s.item.toLowerCase()] = s.section;
+        });
       }
     }
     save();
